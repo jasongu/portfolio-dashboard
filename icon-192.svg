@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <rect width="192" height="192" rx="40" fill="#185FA5"/>
+  <!-- Bar chart icon -->
+  <rect x="32" y="100" width="28" height="60" rx="4" fill="white" opacity="0.9"/>
+  <rect x="72" y="72" width="28" height="88" rx="4" fill="white" opacity="0.9"/>
+  <rect x="112" y="52" width="28" height="108" rx="4" fill="white" opacity="0.9"/>
+  <rect x="152" y="80" width="28" height="80" rx="4" fill="white" opacity="0.9"/>
+  <!-- Trend line -->
+  <polyline points="46,96 86,68 126,48 166,76" stroke="white" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>
+  <!-- Dollar sign -->
+  <text x="96" y="38" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="22" font-weight="700" fill="white" opacity="0.85">$</text>
+</svg>
