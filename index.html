@@ -113,6 +113,24 @@ tr:hover td{background:var(--bg2)}
 .news-headline a:hover{color:var(--blue-tx)}
 .news-summary{font-size:12px;color:var(--tx2);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .news-empty{text-align:center;padding:40px 20px;color:var(--tx3);font-size:13px}
+/* Chart modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity .18s}
+.modal-overlay.open{opacity:1;pointer-events:all}
+.modal{background:var(--bg);border-radius:var(--rlg);width:100%;max-width:780px;box-shadow:0 8px 40px rgba(0,0,0,.22);display:flex;flex-direction:column;max-height:90vh;overflow:hidden}
+.modal-hdr{display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:.5px solid var(--bd);flex-shrink:0}
+.modal-ticker{font-size:18px;font-weight:700;letter-spacing:-.02em}
+.modal-name{font-size:12px;color:var(--tx3);flex:1}
+.modal-close{width:28px;height:28px;border-radius:50%;border:.5px solid var(--bdm);background:var(--bg2);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;color:var(--tx2);flex-shrink:0;line-height:1}
+.modal-close:hover{background:var(--bg3);color:var(--tx)}
+.ticker-link{cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px}
+.ticker-link:hover{color:var(--blue-tx)}
+.rng-btn{padding:4px 10px;border:.5px solid var(--bdm);border-radius:12px;font-size:11px;font-weight:500;color:var(--tx2);cursor:pointer;background:var(--bg2);font-family:inherit;transition:background .12s,color .12s}
+.rng-btn.active{background:var(--tx);color:var(--bg);border-color:var(--tx)}
+.rng-btn:hover:not(.active){background:var(--bg3);color:var(--tx)}
+.modal-stats{display:flex;gap:20px;padding:10px 20px;border-bottom:.5px solid var(--bd);flex-wrap:wrap}
+.mstat{display:flex;flex-direction:column;gap:2px}
+.mstat-l{font-size:10px;color:var(--tx3);text-transform:uppercase;letter-spacing:.06em}
+.mstat-v{font-size:13px;font-weight:600}
 </style>
 </head>
 <body>
@@ -123,10 +141,10 @@ tr:hover td{background:var(--bg2)}
   </div>
   <div class="tabs">
     <div class="tab active" onclick="sw('today')">Today</div>
-    <div class="tab" onclick="sw('dashboard')">Dashboard</div>
     <div class="tab" onclick="sw('holdings')">Holdings</div>
     <div class="tab" onclick="sw('news')">News</div>
     <div class="tab" onclick="sw('chat')">AI Analyst</div>
+    <div class="tab" onclick="sw('dashboard')">Dashboard</div>
   </div>
 
   <!-- TODAY -->
@@ -159,11 +177,12 @@ tr:hover td{background:var(--bg2)}
       </div>
       <div class="tbl-wrap"><table>
         <thead><tr>
-          <th style="width:60px">Ticker</th><th style="width:120px">Name</th><th style="width:46px">Accts</th>
-          <th style="width:68px;text-align:right">Price</th><th style="width:74px;text-align:right">Shares</th>
+          <th style="width:60px">Ticker</th>
+          <th style="width:68px;text-align:right">Price</th><th style="width:70px;text-align:right">Day chg %</th>
+          <th style="width:74px;text-align:right">Shares</th>
           <th style="width:86px;text-align:right">Value</th><th style="width:84px;text-align:right">Day chg $</th>
-          <th style="width:70px;text-align:right">Day chg %</th><th style="width:48px;text-align:right">Beta</th>
-          <th style="width:52px;text-align:right">P/E</th>
+          <th style="width:48px;text-align:right">Beta</th>
+          <th style="width:52px;text-align:right">P/E</th><th style="width:46px;text-align:right">Accts</th>
         </tr></thead>
         <tbody id="tbody"></tbody>
       </table></div>
@@ -254,6 +273,31 @@ tr:hover td{background:var(--bg2)}
   </div>
 </div>
 
+<!-- CHART MODAL -->
+<div class="modal-overlay" id="chart-modal" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-hdr">
+      <div class="modal-ticker" id="modal-ticker">—</div>
+      <div class="modal-name" id="modal-name">—</div>
+      <a id="modal-ext-link" href="#" target="_blank" rel="noopener" style="font-size:11px;color:var(--blue-tx);text-decoration:none;margin-right:8px">Open ↗</a>
+      <button class="modal-close" onclick="closeModalDirect()">✕</button>
+    </div>
+    <div style="display:flex;gap:6px;padding:10px 16px;border-bottom:.5px solid var(--bd)">
+      <button class="rng-btn active" data-r="1D" onclick="setChartRange('1D')">1D</button>
+      <button class="rng-btn" data-r="1W" onclick="setChartRange('1W')">1W</button>
+      <button class="rng-btn" data-r="1M" onclick="setChartRange('1M')">1M</button>
+      <button class="rng-btn" data-r="3M" onclick="setChartRange('3M')">3M</button>
+      <button class="rng-btn" data-r="1Y" onclick="setChartRange('1Y')">1Y</button>
+      <button class="rng-btn" data-r="5Y" onclick="setChartRange('5Y')">5Y</button>
+    </div>
+    <div class="modal-stats" id="modal-stats"></div>
+    <div style="position:relative;height:380px;padding:12px 16px 8px">
+      <div id="modal-loading" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--tx3)">Loading...</div>
+      <canvas id="modal-canvas" style="display:none"></canvas>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── API key ────────────────────────────────────────────────────────────────
 // Regenerate at finnhub.io/dashboard if compromised
@@ -275,7 +319,6 @@ const HOLDINGS = [
   {t:'AMZN', n:'Amazon.com',                sh:145,       ac:148.87, acct:'Brokerage'},
   {t:'JETS', n:'US Global Jets ETF',        sh:1000,      ac:20.27,  acct:'Brokerage'},
   // ── Retirement IRA ────────────────────────────────────────────────────────
-  // Cash: IRA Deposit Sweep (QDERQ)
   {t:'RCASH',n:'Cash (USD)',                sh:708.79,    ac:1.00,   acct:'Retirement'},
   {t:'NVDA', n:'Nvidia',                    sh:300,       ac:190.40, acct:'Retirement'},
   {t:'SETM', n:'Sprott Critical Materials', sh:1500,      ac:32.03,  acct:'Retirement'},
@@ -496,6 +539,14 @@ async function refreshFundamentals(){
   btn.disabled=false; btnP.disabled=false;
 }
 
+// ── Fetch extended hours prices for all tickers (market closed only) ────────
+async function fetchAllExtPrices(){
+  const tickers = [...new Set(HOLDINGS.map(h=>h.t))].filter(t=>!CASH_TICKERS.includes(t));
+  // Fetch in parallel — TD handles concurrent requests fine
+  await Promise.all(tickers.map(t => fetchExtPrice(t)));
+  renderToday(); // re-render once all ext prices are in cache
+}
+
 // ── Portfolio metrics ──────────────────────────────────────────────────────
 function calcMetrics(){
   const tv=MERGED.reduce((s,m)=>s+m.bv+m.rv,0);
@@ -539,23 +590,22 @@ function renderToday(){
     const betaStr=m.beta!=null?m.beta.toFixed(2):'—';
     const peStr=m.pe!=null&&m.pe>0&&m.pe<1000?m.pe.toFixed(1)+'x':'—';
     return`<tr>
-      <td style="font-weight:600;font-size:12px">${m.t}</td>
-      <td style="color:var(--tx2);font-size:11px">${m.n}</td>
-      <td>${badge}</td>
+      <td style="font-weight:600;font-size:12px"><span class="ticker-link" onclick="openChart('${m.t}')">${m.t}</span></td>
       <td style="text-align:right;font-weight:500">$${m.cp.toFixed(2)}</td>
+      <td style="text-align:right" class="${cls}">${pct(dpct)}</td>
       <td style="text-align:right">${m.sh.toLocaleString('en-US',{maximumFractionDigits:2})}</td>
       <td style="text-align:right">${fmt(val)}</td>
       <td style="text-align:right" class="${cls}">${dtot>=0?'+':''}${fmt(dtot)}</td>
-      <td style="text-align:right" class="${cls}">${pct(dpct)}</td>
       <td style="text-align:right;color:var(--tx2)">${betaStr}</td>
       <td style="text-align:right;color:var(--tx2)">${peStr}</td>
+      <td style="text-align:right">${badge}</td>
     </tr>`;
   }).join('');
 }
 
 // ── Tab switch ─────────────────────────────────────────────────────────────
 function sw(t){
-  const tabs=['today','dashboard','holdings','news','chat'];
+  const tabs=['today','holdings','news','chat','dashboard'];
   document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',tabs[i]===t));
   document.querySelectorAll('.section').forEach(el=>el.classList.remove('active'));
   document.getElementById('tab-'+t).classList.add('active');
@@ -726,7 +776,7 @@ function renderHoldings(){
     const a=[...m.accts];
     const badge=a.length===2?'<span class="badge bo">Both</span>':a[0]==='Brokerage'?'<span class="badge bb">Brok</span>':'<span class="badge br">IRA</span>';
     return`<tr>
-      <td style="font-weight:600;font-size:12px;padding-left:16px">${m.t}</td>
+      <td style="font-weight:600;font-size:12px;padding-left:16px"><span class="ticker-link" onclick="openChart('${m.t}')">${m.t}</span></td>
       <td style="color:var(--tx2)">${m.n}</td><td>${badge}</td>
       <td style="text-align:right">${m.bv>0?fmt(m.bv):'—'}</td>
       <td style="text-align:right">${m.rv>0?fmt(m.rv):'—'}</td>
@@ -784,11 +834,249 @@ function addTyping(){
 }
 function removeTyping(id){const el=document.getElementById(id);if(el)el.remove();}
 
+// ── Chart Modal (Twelve Data + Chart.js) ──────────────────────────────────
+const TD_KEY = 'd1aa4b78726946d2b52bcf242c3af47a';
+let modalChart = null;
+let modalTicker = null;
+let modalRange = '1D';
+const chartCache = {}; // key: ticker|range → {labels, closes, open, high, low}
+const extCache  = {}; // key: ticker → {price, label} | null
+
+// Returns true if US markets are currently open (Mon–Fri 9:30–16:00 ET)
+function isMarketOpen(){
+  const now = new Date();
+  const et  = new Date(now.toLocaleString('en-US', {timeZone:'America/New_York'}));
+  const day = et.getDay(); // 0=Sun,6=Sat
+  if(day===0||day===6) return false;
+  const mins = et.getHours()*60 + et.getMinutes();
+  return mins >= 570 && mins < 960; // 9:30–16:00
+}
+
+async function fetchExtPrice(ticker){
+  if(CASH_TICKERS.includes(ticker)) return null;
+  if(extCache[ticker] !== undefined) return extCache[ticker];
+  try{
+    const r = await fetch(`https://api.twelvedata.com/quote?symbol=${ticker}&apikey=${TD_KEY}`, {signal:AbortSignal.timeout(8000)});
+    const d = await r.json();
+    // TD returns extended_change / extended_price for pre/post market
+    if(d.extended_price && parseFloat(d.extended_price) > 0){
+      const xp  = parseFloat(d.extended_price);
+      const xc  = parseFloat(d.extended_change   || 0);
+      const xcp = parseFloat(d.extended_percent_change || 0);
+      const isPost = d.is_market_open === false;
+      const label  = isPost ? 'After-hours' : 'Pre-market';
+      const result = {price: xp, chg: xc, chgPct: xcp, label};
+      extCache[ticker] = result;
+      return result;
+    }
+  } catch(e){}
+  extCache[ticker] = null;
+  return null;
+}
+
+function openChart(ticker){
+  const m = MERGED.find(x=>x.t===ticker);
+  modalTicker = ticker;
+  modalRange = '1D';
+  document.getElementById('modal-ticker').textContent = ticker;
+  document.getElementById('modal-name').textContent = m ? m.n : '';
+  document.getElementById('modal-ext-link').href = `https://finance.yahoo.com/quote/${ticker}`;
+  document.querySelectorAll('.rng-btn').forEach(b => b.classList.toggle('active', b.dataset.r==='1D'));
+  document.getElementById('chart-modal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  loadChart(ticker, '1D');
+}
+
+function setChartRange(r){
+  modalRange = r;
+  document.querySelectorAll('.rng-btn').forEach(b => b.classList.toggle('active', b.dataset.r===r));
+  if(modalTicker) loadChart(modalTicker, r);
+}
+
+function closeModal(e){
+  if(e.target === document.getElementById('chart-modal')) closeModalDirect();
+}
+function closeModalDirect(){
+  document.getElementById('chart-modal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeModalDirect(); });
+
+// Map range → Twelve Data interval + outputsize
+function tdParams(range){
+  switch(range){
+    case '1D': return {interval:'5min',  outputsize:78};   // ~6.5hr session
+    case '1W': return {interval:'30min', outputsize:65};
+    case '1M': return {interval:'1day',  outputsize:31};
+    case '3M': return {interval:'1day',  outputsize:90};
+    case '1Y': return {interval:'1week', outputsize:52};
+    case '5Y': return {interval:'1month',outputsize:60};
+    default:   return {interval:'1day',  outputsize:30};
+  }
+}
+
+function formatLabel(dtStr, range){
+  const d = new Date(dtStr.replace(' ','T'));
+  if(range==='1D') return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  if(range==='1W') return d.toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'});
+  if(range==='1M'||range==='3M') return d.toLocaleDateString([],{month:'short',day:'numeric'});
+  if(range==='1Y') return d.toLocaleDateString([],{month:'short',day:'numeric'});
+  return d.toLocaleDateString([],{month:'short',year:'2-digit'});
+}
+
+async function loadChart(ticker, range){
+  const loading = document.getElementById('modal-loading');
+  const canvas  = document.getElementById('modal-canvas');
+  const stats   = document.getElementById('modal-stats');
+  loading.textContent = 'Loading...';
+  loading.style.display = 'flex';
+  canvas.style.display  = 'none';
+  stats.innerHTML = '';
+
+  if(CASH_TICKERS.includes(ticker)){
+    loading.textContent = 'No price history for cash positions.';
+    return;
+  }
+
+  const cacheKey = `${ticker}|${range}`;
+  let payload = chartCache[cacheKey];
+
+  if(!payload){
+    const {interval, outputsize} = tdParams(range);
+    const url = `https://api.twelvedata.com/time_series?symbol=${ticker}&interval=${interval}&outputsize=${outputsize}&apikey=${TD_KEY}`;
+    try{
+      // Fetch chart data and extended price in parallel
+      const [r, ext] = await Promise.all([
+        fetch(url, {signal: AbortSignal.timeout(10000)}),
+        isMarketOpen() ? Promise.resolve(null) : fetchExtPrice(ticker)
+      ]);
+      const d = await r.json();
+      if(!d.values || !d.values.length){
+        loading.textContent = `No data returned${d.message ? ': '+d.message : '.'}`;
+        return;
+      }
+      const rows = [...d.values].reverse();
+      payload = {
+        labels: rows.map(v => formatLabel(v.datetime, range)),
+        closes: rows.map(v => parseFloat(v.close)),
+        opens:  rows.map(v => parseFloat(v.open)),
+        highs:  rows.map(v => parseFloat(v.high)),
+        lows:   rows.map(v => parseFloat(v.low)),
+        ext,
+      };
+      chartCache[cacheKey] = payload;
+    } catch(e){
+      loading.textContent = 'Failed to load chart data. Check your connection.';
+      return;
+    }
+  } else if(!isMarketOpen() && payload.ext === undefined){
+    // Cache hit but no ext price yet — fetch it
+    payload.ext = await fetchExtPrice(ticker);
+  }
+
+  renderChart(payload, range);
+}
+
+function renderChart({labels, closes, opens, highs, lows, ext}, range){
+  const loading = document.getElementById('modal-loading');
+  const canvas  = document.getElementById('modal-canvas');
+  const stats   = document.getElementById('modal-stats');
+
+  const first = closes[0], last = closes[closes.length-1];
+  const chg = last - first, chgPct = (chg/first)*100;
+  const hi = Math.max(...highs), lo = Math.min(...lows);
+  const isPos = chg >= 0;
+  const lineColor  = isPos ? '#3B6D11' : '#A32D2D';
+  const fillColor  = isPos ? 'rgba(59,109,17,.10)' : 'rgba(163,45,45,.10)';
+  const tickColor  = getComputedStyle(document.documentElement).getPropertyValue('--tx3').trim() || '#999';
+  const gridColor  = getComputedStyle(document.documentElement).getPropertyValue('--bd').trim()  || 'rgba(0,0,0,.08)';
+
+  // Extended hours stat — only show outside market hours if data available
+  const extHtml = (!isMarketOpen() && ext)
+    ? `<div class="mstat">
+        <div class="mstat-l">${ext.label}</div>
+        <div class="mstat-v">$${ext.price.toFixed(2)} <span style="font-size:11px;font-weight:400" class="${ext.chg>=0?'pos':'neg'}">${ext.chg>=0?'+':''}${ext.chgPct.toFixed(2)}%</span></div>
+      </div>`
+    : '';
+
+  stats.innerHTML = `
+    <div class="mstat"><div class="mstat-l">Last</div><div class="mstat-v">$${last.toFixed(2)}</div></div>
+    ${extHtml}
+    <div class="mstat"><div class="mstat-l">Change</div><div class="mstat-v ${isPos?'pos':'neg'}">${isPos?'+':''}$${chg.toFixed(2)} (${isPos?'+':''}${chgPct.toFixed(2)}%)</div></div>
+    <div class="mstat"><div class="mstat-l">High</div><div class="mstat-v">$${hi.toFixed(2)}</div></div>
+    <div class="mstat"><div class="mstat-l">Low</div><div class="mstat-v">$${lo.toFixed(2)}</div></div>
+    <div class="mstat"><div class="mstat-l">Open</div><div class="mstat-v">$${opens[0].toFixed(2)}</div></div>
+  `;
+
+  loading.style.display = 'none';
+  canvas.style.display  = 'block';
+
+  if(modalChart){ modalChart.destroy(); modalChart = null; }
+
+  // Determine sensible tick count based on data length
+  const maxTicks = Math.min(labels.length, range==='1D'?8:range==='1W'?7:10);
+
+  modalChart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets:[{
+        data: closes,
+        borderColor: lineColor,
+        backgroundColor: fillColor,
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 5,
+        pointHoverBackgroundColor: lineColor,
+        fill: true,
+        tension: 0.2
+      }]
+    },
+    options:{
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          mode:'index', intersect:false,
+          callbacks:{
+            title: ctx => ctx[0].label,
+            label: ctx => ` $${Number(ctx.raw).toFixed(2)}`
+          }
+        }
+      },
+      scales:{
+        x:{
+          ticks:{
+            maxTicksLimit: maxTicks,
+            maxRotation: 0,        // keep labels horizontal
+            color: tickColor,
+            font:{size:10},
+          },
+          grid:{ color: gridColor, tickLength: 6 },
+          border:{ dash:[2,3] }
+        },
+        y:{
+          position:'right',
+          ticks:{
+            callback: v => '$'+Number(v).toFixed(2),
+            color: tickColor,
+            font:{size:10},
+            maxTicksLimit: 6,
+          },
+          grid:{ color: gridColor, tickLength: 6 },
+          border:{ dash:[2,3] }
+        }
+      },
+      interaction:{ mode:'index', intersect:false }
+    }
+  });
+}
+
 initialLoad();
 
-// Register service worker for PWA
-if("serviceWorker" in navigator){
-  navigator.serviceWorker.register("sw.js").catch(()=>{});
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
 </script>
 </body>
