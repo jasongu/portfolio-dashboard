@@ -23,11 +23,11 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   /* ── Core palette — very light warm cream ── */
-  --bg:  #fdf8ee;           /* near-white warm cream panel */
-  --bg2: #fffcf5;           /* lightest surface */
-  --bg3: #f7f0dc;           /* page canvas — soft warm white */
-  --panel: rgba(253,248,238,.98);
-  --panel2: rgba(250,244,228,.95);
+  --bg:  #f0f4f8;           /* near-white cool blue-cream panel */
+  --bg2: #f5f8fc;           /* lightest surface */
+  --bg3: #e8eef5;           /* page canvas — cool blue-white */
+  --panel: rgba(240,244,248,.98);
+  --panel2: rgba(232,238,245,.95);
 
   /* ── Text — medium warm browns (not too dark on very light bg) ── */
   --tx:  #3a2a12;           /* warm dark brown — primary */
@@ -39,13 +39,13 @@
   --bdm: rgba(130,95,38,.38);
   --bdg: rgba(140,100,35,.60);
 
-  /* ── Gold / amber — rich, not too bright ── */
-  --gold:  #7a5c18;
-  --gold2: #9a7422;
-  --gold3: #b8902c;
-  --gold-dim: #6a4e14;
-  --gold-glow: rgba(120,92,24,.20);
-  --gold-bg: rgba(140,105,30,.09);
+  /* ── Gold / amber — cool steel-gold ── */
+  --gold:  #4a5a28;
+  --gold2: #5e7232;
+  --gold3: #748e3c;
+  --gold-dim: #3c4a20;
+  --gold-glow: rgba(74,90,40,.20);
+  --gold-bg: rgba(80,96,42,.09);
 
   /* ── Teal — muted to sit calmly on parchment ── */
   --teal:  #2a6870;
@@ -67,19 +67,34 @@
   font-family:'Philosopher',Georgia,serif;
 }
 
-/* ── Page background — very light warm cream ── */
+/* ── Page background — cool bluish cream ── */
 body{
   background:var(--bg3);
   background-image:
-    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(160,120,50,.14) 0%, transparent 70%),
-    radial-gradient(ellipse 40% 30% at 80% 20%, rgba(140,105,40,.10) 0%, transparent 60%);
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(80,110,160,.12) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 30% at 80% 20%, rgba(60,90,140,.08) 0%, transparent 60%);
   color:var(--tx);
   min-height:100vh;
   font-family:'Philosopher',Georgia,serif;
+  position:relative;
 }
 
+/* ── Full-width black header bar (lives outside .shell) ── */
+.hdr-bar{
+  background:#000;
+  width:100%;
+  position:relative;
+  z-index:10;
+}
+.hdr{
+  display:flex;align-items:center;gap:14px;
+  margin-bottom:0;
+  padding:14px 20px 13px;
+  max-width:960px;
+  margin-left:auto;margin-right:auto;
+}
 /* ── Shell ── */
-.shell{max-width:960px;margin:0 auto;padding:24px 20px 60px;position:relative}
+.shell{max-width:960px;margin:0 auto;padding:0 0 60px;position:relative;z-index:1}
 
 /* ── Decorative corner glyph helper ── */
 .ff-panel{position:relative}
@@ -95,30 +110,31 @@ body{
 .ff-panel::after{top:6px;right:8px}
 
 /* ── Header ── */
-.hdr{display:flex;align-items:center;gap:14px;margin-bottom:28px;position:relative;padding-bottom:14px}
 .btn-import-hdr{
   margin-left:auto;
   font-size:10px;padding:5px 13px;
-  border:1px solid var(--bdm);border-radius:var(--rsm);
-  background:var(--gold-bg);color:var(--gold);
+  border:1px solid rgba(255,255,255,.25);border-radius:var(--rsm);
+  background:rgba(255,255,255,.08);color:rgba(255,255,255,.80);
   font-family:'Philosopher',serif;font-weight:700;
   letter-spacing:.08em;text-transform:uppercase;
   cursor:pointer;transition:background .15s,color .15s,border-color .15s;
   white-space:nowrap;flex-shrink:0;
 }
-.btn-import-hdr:hover{background:rgba(140,105,30,.20);color:var(--gold2);border-color:var(--bdg)}
-.hdr::after{
-  content:'';position:absolute;bottom:0;left:0;right:0;
-  height:1px;
-  background:linear-gradient(90deg,transparent,var(--bdg) 20%,var(--gold) 50%,var(--bdg) 80%,transparent);
-}
+.btn-import-hdr:hover{background:rgba(255,255,255,.16);color:#fff;border-color:rgba(255,255,255,.5)}
 .hdr-t{
   font-family:'Cinzel Decorative','Cinzel',Georgia,serif;
   font-size:20px;font-weight:700;
   letter-spacing:.08em;
-  color:var(--gold);
+  color:#fff;
+  text-shadow:
+    -1px -1px 0 #000, 1px -1px 0 #000,
+    -1px  1px 0 #000, 1px  1px 0 #000,
+    0 2px 8px rgba(0,0,0,.6);
 }
-.hdr-s{font-size:11px;color:var(--tx3);letter-spacing:.1em;text-transform:uppercase;font-family:'Philosopher',serif}
+.hdr-s{font-size:11px;color:rgba(255,255,255,.55);letter-spacing:.1em;text-transform:uppercase;font-family:'Philosopher',serif}
+
+/* ── Tabs wrapper needs top padding now that header has no bottom margin ── */
+.tabs-wrap{padding:16px 20px 0 20px}
 
 /* ── Tabs — FF12 menu tabs ── */
 .tabs{
@@ -157,7 +173,12 @@ body{
 /* ── Grids ── */
 .g5{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px}
 .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
-@media(max-width:700px){.g5{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(2,1fr)}}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
+.idx-row{margin-bottom:10px}
+.idx-bar{padding:16px 20px 0}
+.metric-idx .mval{font-size:17px}
+.idx-chg{font-size:11px;font-weight:600;margin-top:3px}
+@media(max-width:700px){.g5{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:repeat(3,1fr)}}
 
 /* ── Metric cards ── */
 .metric{
@@ -570,28 +591,34 @@ tr:hover td{background:rgba(201,168,76,.05)}
 </style>
 </head>
 <body>
-<div class="shell">
+<div class="hdr-bar">
   <div class="hdr">
-    <svg width="36" height="36" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;filter:drop-shadow(0 1px 3px rgba(0,0,0,.15))">
-      <rect width="64" height="64" rx="10" fill="#ffffff"/>
-      <!-- bars -->
-      <rect x="6" y="38" width="12" height="18" rx="2" fill="#e8607a"/>
-      <rect x="22" y="28" width="12" height="28" rx="2" fill="#5bbcd8"/>
-      <rect x="38" y="18" width="12" height="38" rx="2" fill="#e8607a" opacity=".85"/>
-      <!-- baseline -->
-      <rect x="4" y="56" width="48" height="2" rx="1" fill="#534ab7" opacity=".7"/>
-      <!-- trend curve -->
-      <path d="M12 36 Q20 20 38 14" stroke="#534ab7" stroke-width="2" fill="none" stroke-dasharray="2 2"/>
-      <!-- gold coin -->
-      <circle cx="52" cy="12" r="10" fill="#f5c518" stroke="#534ab7" stroke-width="2"/>
-      <text x="52" y="17" text-anchor="middle" font-size="11" font-weight="bold" fill="#1a1040" font-family="Arial">$</text>
-      <!-- arrow head -->
-      <polygon points="41,10 48,14 42,18" fill="#534ab7"/>
-    </svg>
     <div class="hdr-t">Portfolio Dashboard</div>
     <div class="hdr-s">Brokerage + Retirement IRA</div>
     <button class="btn-import-hdr" onclick="openImportModal()">⇪ Import</button>
   </div>
+</div>
+<div class="shell">
+  <div class="idx-bar">
+    <div class="g3 idx-row">
+      <div class="metric metric-idx">
+        <div class="mlbl">Dow (DIA)</div>
+        <div class="mval" id="idx-dji-p">—</div>
+        <div class="msub idx-chg" id="idx-dji-c">—</div>
+      </div>
+      <div class="metric metric-idx">
+        <div class="mlbl">S&amp;P 500 (SPY)</div>
+        <div class="mval" id="idx-spx-p">—</div>
+        <div class="msub idx-chg" id="idx-spx-c">—</div>
+      </div>
+      <div class="metric metric-idx">
+        <div class="mlbl">NASDAQ (QQQ)</div>
+        <div class="mval" id="idx-ixic-p">—</div>
+        <div class="msub idx-chg" id="idx-ixic-c">—</div>
+      </div>
+    </div>
+  </div>
+  <div class="tabs-wrap">
   <div class="tabs">
     <div class="tab active" onclick="sw('today')">Today</div>
     <div class="tab" onclick="sw('holdings')">Holdings</div>
@@ -630,9 +657,10 @@ tr:hover td{background:rgba(201,168,76,.05)}
       <div class="tbl-wrap"><table>
         <thead><tr>
           <th style="width:60px">Ticker</th>
-          <th style="width:68px;text-align:right">Price</th><th style="width:70px;text-align:right">Day chg %</th>
-          <th style="width:74px;text-align:right">Shares</th>
-          <th style="width:86px;text-align:right">Value</th><th style="width:84px;text-align:right">Day chg $</th>
+          <th style="width:68px;text-align:right">Price</th><th style="width:72px;text-align:right">Chg/sh</th><th style="width:70px;text-align:right">Day chg %</th>
+          <th style="width:84px;text-align:right">Day chg $</th>
+          <th style="width:130px;text-align:right" class="col-hide-xs">StDev 7d/30d/1yr</th>
+          <th style="width:86px;text-align:right">Value</th>
           <th style="width:48px;text-align:right" class="col-hide-xs">Beta</th>
           <th style="width:46px;text-align:right">Accts</th>
         </tr></thead>
@@ -811,6 +839,8 @@ tr:hover td{background:rgba(201,168,76,.05)}
     </div>
   </div>
 </div>
+</div><!-- /tabs-wrap -->
+</div><!-- /shell -->
 
 <div class="modal-overlay" id="chart-modal" onclick="closeModal(event)">
   <div class="modal">
@@ -883,6 +913,7 @@ const PALETTE = ['#4DBFCF','#C9A84C','#7F77DD','#7EC85A','#E0825A','#A0C0E0',
 // ── Live data stores ───────────────────────────────────────────────────────
 const livePrice = {}; // { ticker: { cp, pc } }
 const liveFund  = {}; // { ticker: { beta, pe } }
+const liveStdev = {}; // { ticker: { s7, s30, s252 } }
 
 let MERGED=[], aC=null, vC=null, gC=null, chatHistory=[];
 let pricesAt=null, fundAt=null;
@@ -977,7 +1008,81 @@ function merge(){
     .sort((a,b)=>(b.bv+b.rv)-(a.bv+a.rv));
 }
 
-// ── Initial load — prices + fundamentals together ──────────────────────────
+// ── Standard deviation via Finnhub /stock/candle ──────────────────────────
+// Fetched once per day (7d), once per week (30d), once per month (1yr).
+// Stored in localStorage to survive page refreshes.
+
+// Safe localStorage — Edge tracking prevention blocks it on file:// origins
+function lsGet(key){ try{ return localStorage.getItem(key); }catch(e){ return null; } }
+function lsSet(key,val){ try{ localStorage.setItem(key,val); }catch(e){} }
+
+function stddev(arr){
+  if(!arr||arr.length<2) return null;
+  const mean=arr.reduce((a,b)=>a+b,0)/arr.length;
+  const variance=arr.reduce((s,v)=>s+(v-mean)**2,0)/(arr.length-1);
+  return Math.sqrt(variance);
+}
+
+function stdevCacheKey(period){ return `stdev_${period}`; }
+
+function loadStdevCache(){
+  const today = new Date().toISOString().slice(0,10);
+  const weekKey = (() => { const d=new Date(); d.setDate(d.getDate()-d.getDay()); return d.toISOString().slice(0,10); })();
+  const monthKey = new Date().toISOString().slice(0,7);
+  try{
+    const c7   = JSON.parse(lsGet(stdevCacheKey('7d'))   ||'null');
+    const c30  = JSON.parse(lsGet(stdevCacheKey('30d'))  ||'null');
+    const c252 = JSON.parse(lsGet(stdevCacheKey('252d')) ||'null');
+    if(c7   && c7.date   === today)    Object.assign(liveStdev, c7.data);
+    if(c30  && c30.week  === weekKey)  Object.entries(c30.data).forEach(([t,v])=>{ if(!liveStdev[t]) liveStdev[t]={}; liveStdev[t].s30=v.s30; });
+    if(c252 && c252.month=== monthKey) Object.entries(c252.data).forEach(([t,v])=>{ if(!liveStdev[t]) liveStdev[t]={}; liveStdev[t].s252=v.s252; });
+    return { need7: !c7||c7.date!==today, need30: !c30||c30.week!==weekKey, need252: !c252||c252.month!==monthKey };
+  }catch(e){ return {need7:true,need30:true,need252:true}; }
+}
+
+async function fetchStdevForTicker(ticker){
+  if(CASH_TICKERS.includes(ticker)) return;
+  try{
+    const now  = Math.floor(Date.now()/1000);
+    const from = now - 400*24*60*60;
+    const d = await fhFetch(`/stock/candle?symbol=${ticker}&resolution=D&from=${from}&to=${now}`);
+    if(!d || d.s !== 'ok' || !d.c || d.c.length < 8) return;
+    const closes = d.c;
+    const returns = [];
+    for(let i=1; i<closes.length; i++) returns.push(Math.log(closes[i]/closes[i-1]));
+    const s7   = stddev(returns.slice(-7));
+    const s30  = stddev(returns.slice(-30));
+    const s252 = stddev(returns.slice(-252));
+    if(!liveStdev[ticker]) liveStdev[ticker]={};
+    if(s7   != null) liveStdev[ticker].s7   = s7;
+    if(s30  != null) liveStdev[ticker].s30  = s30;
+    if(s252 != null) liveStdev[ticker].s252 = s252;
+  }catch(e){}
+}
+
+async function fetchAllStdev(){
+  const {need7, need30, need252} = loadStdevCache();
+  if(!need7 && !need30 && !need252){ renderToday(); return; }
+
+  const tickers = [...new Set(HOLDINGS.map(h=>h.t))].filter(t=>!CASH_TICKERS.includes(t));
+  const today    = new Date().toISOString().slice(0,10);
+  const weekKey  = (() => { const d=new Date(); d.setDate(d.getDate()-d.getDay()); return d.toISOString().slice(0,10); })();
+  const monthKey = new Date().toISOString().slice(0,7);
+
+  for(const t of tickers){
+    await fetchStdevForTicker(t);
+    await delay(300);
+  }
+
+  const mk = t => ({ s7: liveStdev[t]?.s7, s30: liveStdev[t]?.s30, s252: liveStdev[t]?.s252 });
+  const data = Object.fromEntries(tickers.map(t=>[t, mk(t)]));
+  if(need7)   lsSet(stdevCacheKey('7d'),   JSON.stringify({date:today,   data}));
+  if(need30)  lsSet(stdevCacheKey('30d'),  JSON.stringify({week:weekKey,  data}));
+  if(need252) lsSet(stdevCacheKey('252d'), JSON.stringify({month:monthKey,data}));
+
+  renderToday();
+}
+
 async function initialLoad(){
   document.getElementById('load-state').style.display='flex';
   document.getElementById('today-content').style.display='none';
@@ -1016,7 +1121,7 @@ async function initialLoad(){
   const missed=tickers.length-priceOk;
   if(missed>0) showErr(`${missed} ticker${missed>1?'s':''} could not be fetched and are excluded from totals.`);
 
-  updateAsOf(); renderToday();
+  updateAsOf(); loadStdevCache(); renderToday(); fetchIndices(); fetchAllStdev();
 }
 
 // ── Refresh prices only ────────────────────────────────────────────────────
@@ -1045,7 +1150,7 @@ async function refreshPrices(){
   pricesAt=ts(); MERGED=merge();
   const missed=tickers.length-ok;
   if(missed>0) showErr(`${missed} ticker${missed>1?'s':''} could not be refreshed.`);
-  updateAsOf(); renderToday();
+  updateAsOf(); renderToday(); fetchIndices();
   setTimeout(()=>{ status.style.display='none'; bar.style.width='0%'; }, 1200);
   btn.disabled=false; btnF.disabled=false;
 }
@@ -1102,7 +1207,7 @@ function renderToday(){
   let tv=0,tgl=0;
   const rows=MERGED.map(m=>{
     const val=m.bv+m.rv, dps=m.cp-m.pc, dtot=dps*m.sh, dpct=m.pc>0?(dps/m.pc)*100:0;
-    tv+=val; tgl+=dtot; return{m,val,dtot,dpct};
+    tv+=val; tgl+=dtot; return{m,val,dps,dtot,dpct};
   });
 
   document.getElementById('t-val').textContent=fmt(tv);
@@ -1120,18 +1225,22 @@ function renderToday(){
     document.getElementById('t-pe-s').textContent=(avgPE>30?'growth-priced':avgPE<15?'value-priced':'fairly priced')+' · implied LT growth';
   }
 
-  document.getElementById('tbody').innerHTML=rows.map(({m,val,dtot,dpct})=>{
+  document.getElementById('tbody').innerHTML=rows.map(({m,val,dps,dtot,dpct})=>{
     const cls=dtot>=0?'pos':'neg';
     const a=[...m.accts];
     const badge=a.length===2?'<span class="badge bo">Both</span>':a[0]==='Brokerage'?'<span class="badge bb">Brok</span>':'<span class="badge br">IRA</span>';
     const betaStr=m.beta!=null?m.beta.toFixed(2):'—';
+    const sd=liveStdev[m.t]||{};
+    const fsd=v=>v!=null?(v*100).toFixed(2)+'%':'—';
+    const sdStr=`${fsd(sd.s7)} / ${fsd(sd.s30)} / ${fsd(sd.s252)}`;
     return`<tr>
       <td style="font-weight:600;font-size:12px"><span class="ticker-link" onclick="openChart('${m.t}')">${m.t}</span></td>
       <td style="text-align:right;font-weight:500">$${m.cp.toFixed(2)}</td>
+      <td style="text-align:right" class="${cls}">${dps>=0?'+':''}$${Math.abs(dps).toFixed(2)}</td>
       <td style="text-align:right" class="${cls}">${pct(dpct)}</td>
-      <td style="text-align:right">${m.sh.toLocaleString('en-US',{maximumFractionDigits:2})}</td>
-      <td style="text-align:right">${fmt(val)}</td>
       <td style="text-align:right" class="${cls}">${dtot>=0?'+':''}${fmt(dtot)}</td>
+      <td style="text-align:right;color:var(--tx3);font-size:11px" class="col-hide-xs">${sdStr}</td>
+      <td style="text-align:right">${fmt(val)}</td>
       <td style="text-align:right;color:var(--tx2)" class="col-hide-xs">${betaStr}</td>
       <td style="text-align:right">${badge}</td>
     </tr>`;
@@ -1383,6 +1492,32 @@ function removeTyping(id){const el=document.getElementById(id);if(el)el.remove()
 
 // ── Chart Modal (Twelve Data + Chart.js) ──────────────────────────────────
 const TD_KEY = 'd1aa4b78726946d2b52bcf242c3af47a';
+
+// ── Market indices via Finnhub ETF proxies ────────────────────────────────
+// Twelve Data requires paid plan for index symbols; ETF proxies work on free tier
+const INDEX_MAP = [
+  { id:'dji',  symbol:'DIA',  label:'Dow (DIA)'  },
+  { id:'spx',  symbol:'SPY',  label:'S&P (SPY)'  },
+  { id:'ixic', symbol:'QQQ',  label:'NASDAQ (QQQ)'},
+];
+
+async function fetchIndices(){
+  await Promise.all(INDEX_MAP.map(async idx => {
+    try{
+      const d = await fhFetch(`/quote?symbol=${idx.symbol}`);
+      if(!d || !d.c || d.c <= 0) return;
+      const chg    = d.c - d.pc;
+      const chgPct = d.pc > 0 ? (chg / d.pc) * 100 : 0;
+      const sign   = chg >= 0 ? '+' : '';
+      const cls    = chg >= 0 ? 'pos' : 'neg';
+      document.getElementById(`idx-${idx.id}-p`).textContent =
+        d.c.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+      const cel = document.getElementById(`idx-${idx.id}-c`);
+      cel.textContent = `${sign}${chg.toFixed(2)}  (${sign}${chgPct.toFixed(2)}%)`;
+      cel.className = `msub idx-chg ${cls}`;
+    }catch(e){}
+  }));
+}
 let modalChart = null;
 let modalTicker = null;
 let modalRange = '1D';
