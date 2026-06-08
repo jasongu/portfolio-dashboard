@@ -914,6 +914,7 @@ const PALETTE = ['#4DBFCF','#C9A84C','#7F77DD','#7EC85A','#E0825A','#A0C0E0',
 const livePrice = {}; // { ticker: { cp, pc } }
 const liveFund  = {}; // { ticker: { beta, pe } }
 const liveStdev = {}; // { ticker: { s7, s30, s252 } }
+const stdevStale = new Set(); // tickers with stale/pending stdev data
 
 let MERGED=[], aC=null, vC=null, gC=null, chatHistory=[];
 let pricesAt=null, fundAt=null;
@@ -1033,21 +1034,26 @@ function loadStdevCache(){
     const c7   = JSON.parse(lsGet(stdevCacheKey('7d'))   ||'null');
     const c30  = JSON.parse(lsGet(stdevCacheKey('30d'))  ||'null');
     const c252 = JSON.parse(lsGet(stdevCacheKey('252d')) ||'null');
-    if(c7   && c7.date   === today)    Object.assign(liveStdev, c7.data);
-    if(c30  && c30.week  === weekKey)  Object.entries(c30.data).forEach(([t,v])=>{ if(!liveStdev[t]) liveStdev[t]={}; liveStdev[t].s30=v.s30; });
-    if(c252 && c252.month=== monthKey) Object.entries(c252.data).forEach(([t,v])=>{ if(!liveStdev[t]) liveStdev[t]={}; liveStdev[t].s252=v.s252; });
-    return { need7: !c7||c7.date!==today, need30: !c30||c30.week!==weekKey, need252: !c252||c252.month!==monthKey };
+    const need7   = !c7   || c7.date   !== today;
+    const need30  = !c30  || c30.week  !== weekKey;
+    const need252 = !c252 || c252.month!== monthKey;
+    // Always load whatever stale data exists so it shows immediately
+    if(c7?.data)   Object.entries(c7.data).forEach(([t,v])=>{ if(!liveStdev[t]) liveStdev[t]={}; if(v.s7!=null)   liveStdev[t].s7=v.s7; });
+    if(c30?.data)  Object.entries(c30.data).forEach(([t,v])=>{ if(!liveStdev[t]) liveStdev[t]={}; if(v.s30!=null)  liveStdev[t].s30=v.s30; });
+    if(c252?.data) Object.entries(c252.data).forEach(([t,v])=>{ if(!liveStdev[t]) liveStdev[t]={}; if(v.s252!=null) liveStdev[t].s252=v.s252; });
+    return { need7, need30, need252 };
   }catch(e){ return {need7:true,need30:true,need252:true}; }
 }
 
 async function fetchStdevForTicker(ticker){
   if(CASH_TICKERS.includes(ticker)) return;
   try{
-    const now  = Math.floor(Date.now()/1000);
-    const from = now - 400*24*60*60;
-    const d = await fhFetch(`/stock/candle?symbol=${ticker}&resolution=D&from=${from}&to=${now}`);
-    if(!d || d.s !== 'ok' || !d.c || d.c.length < 8) return;
-    const closes = d.c;
+    const url = `https://api.twelvedata.com/time_series?symbol=${ticker}&interval=1day&outputsize=260&apikey=${TD_KEY}`;
+    const r = await fetch(url, {signal:AbortSignal.timeout(10000)});
+    const d = await r.json();
+    if(!d || d.status==='error' || !d.values || d.values.length < 8) return;
+    // values come newest-first, reverse to chronological
+    const closes = [...d.values].reverse().map(v => parseFloat(v.close));
     const returns = [];
     for(let i=1; i<closes.length; i++) returns.push(Math.log(closes[i]/closes[i-1]));
     const s7   = stddev(returns.slice(-7));
@@ -1069,9 +1075,15 @@ async function fetchAllStdev(){
   const weekKey  = (() => { const d=new Date(); d.setDate(d.getDate()-d.getDay()); return d.toISOString().slice(0,10); })();
   const monthKey = new Date().toISOString().slice(0,7);
 
+  // Mark all as stale so existing cached values show in red
+  tickers.forEach(t => stdevStale.add(t));
+  renderToday(); // show stale data in red immediately
+
   for(const t of tickers){
     await fetchStdevForTicker(t);
-    await delay(300);
+    stdevStale.delete(t); // mark fresh
+    renderToday();
+    await delay(8000); // Twelve Data free tier: 8 calls/min
   }
 
   const mk = t => ({ s7: liveStdev[t]?.s7, s30: liveStdev[t]?.s30, s252: liveStdev[t]?.s252 });
@@ -1233,13 +1245,14 @@ function renderToday(){
     const sd=liveStdev[m.t]||{};
     const fsd=v=>v!=null?(v*100).toFixed(2)+'%':'—';
     const sdStr=`${fsd(sd.s7)} / ${fsd(sd.s30)} / ${fsd(sd.s252)}`;
+    const sdColor=stdevStale.has(m.t)?'color:var(--red);font-size:11px':'color:var(--tx3);font-size:11px';
     return`<tr>
       <td style="font-weight:600;font-size:12px"><span class="ticker-link" onclick="openChart('${m.t}')">${m.t}</span></td>
       <td style="text-align:right;font-weight:500">$${m.cp.toFixed(2)}</td>
       <td style="text-align:right" class="${cls}">${dps>=0?'+':''}$${Math.abs(dps).toFixed(2)}</td>
       <td style="text-align:right" class="${cls}">${pct(dpct)}</td>
       <td style="text-align:right" class="${cls}">${dtot>=0?'+':''}${fmt(dtot)}</td>
-      <td style="text-align:right;color:var(--tx3);font-size:11px" class="col-hide-xs">${sdStr}</td>
+      <td style="text-align:right;${sdColor}" class="col-hide-xs">${sdStr}</td>
       <td style="text-align:right">${fmt(val)}</td>
       <td style="text-align:right;color:var(--tx2)" class="col-hide-xs">${betaStr}</td>
       <td style="text-align:right">${badge}</td>
