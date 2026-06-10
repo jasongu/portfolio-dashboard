@@ -628,6 +628,21 @@ tr:hover td{background:rgba(201,168,76,.05)}
       return null;
     };
 
+    window._fbSaveStdev = async (period, payload) => {
+      try{
+        await setDoc(doc(db, 'portfolio', `stdev_${period}`), { data: JSON.stringify(payload), updatedAt: Date.now() });
+        console.log(`[firebase] stdev_${period} saved`);
+      }catch(e){ console.warn(`[firebase] stdev_${period} save failed`, e); }
+    };
+
+    window._fbLoadStdev = async (period) => {
+      try{
+        const snap = await getDoc(doc(db, 'portfolio', `stdev_${period}`));
+        if(snap.exists()) return JSON.parse(snap.data().data);
+      }catch(e){ console.warn(`[firebase] stdev_${period} load failed`, e); }
+      return null;
+    };
+
     window._fbReady = true;
     window.dispatchEvent(new Event('fb-ready'));
   </script>
@@ -1079,23 +1094,37 @@ function stddev(arr){
 
 function stdevCacheKey(period){ return `stdev_${period}`; }
 
-function loadStdevCache(){
-  const today = new Date().toISOString().slice(0,10);
-  const weekKey = (() => { const d=new Date(); d.setDate(d.getDate()-d.getDay()); return d.toISOString().slice(0,10); })();
+async function loadStdevCache(){
+  const today    = new Date().toISOString().slice(0,10);
+  const weekKey  = (() => { const d=new Date(); d.setDate(d.getDate()-d.getDay()); return d.toISOString().slice(0,10); })();
   const monthKey = new Date().toISOString().slice(0,7);
-  try{
-    const c7   = JSON.parse(lsGet(stdevCacheKey('7d'))   ||'null');
-    const c30  = JSON.parse(lsGet(stdevCacheKey('30d'))  ||'null');
-    const c252 = JSON.parse(lsGet(stdevCacheKey('252d')) ||'null');
-    const need7   = !c7   || c7.date   !== today   || !c7.data   || Object.values(c7.data).every(v=>v.s7==null);
-    const need30  = !c30  || c30.week  !== weekKey  || !c30.data  || Object.values(c30.data).every(v=>v.s30==null);
-    const need252 = !c252 || c252.month!== monthKey || !c252.data || Object.values(c252.data).every(v=>v.s252==null);
-    // Always load whatever stale data exists so it shows immediately
-    if(c7?.data)   Object.entries(c7.data).forEach(([t,v])=>{ if(!liveStdev[t]) liveStdev[t]={}; if(v.s7!=null)   liveStdev[t].s7=v.s7; });
-    if(c30?.data)  Object.entries(c30.data).forEach(([t,v])=>{ if(!liveStdev[t]) liveStdev[t]={}; if(v.s30!=null)  liveStdev[t].s30=v.s30; });
-    if(c252?.data) Object.entries(c252.data).forEach(([t,v])=>{ if(!liveStdev[t]) liveStdev[t]={}; if(v.s252!=null) liveStdev[t].s252=v.s252; });
-    return { need7, need30, need252 };
-  }catch(e){ console.log('[stdev] loadStdevCache error:', e); return {need7:true,need30:true,need252:true}; }
+
+  // Try localStorage first (fast), then Firebase (cross-device)
+  let c7   = JSON.parse(lsGet(stdevCacheKey('7d'))   ||'null');
+  let c30  = JSON.parse(lsGet(stdevCacheKey('30d'))  ||'null');
+  let c252 = JSON.parse(lsGet(stdevCacheKey('252d')) ||'null');
+
+  // If localStorage missing, try Firebase
+  if(window._fbLoadStdev){
+    if(!c7)   c7   = await window._fbLoadStdev('7d');
+    if(!c30)  c30  = await window._fbLoadStdev('30d');
+    if(!c252) c252 = await window._fbLoadStdev('252d');
+    // Also populate localStorage from Firebase for next time
+    if(c7)   lsSet(stdevCacheKey('7d'),   JSON.stringify(c7));
+    if(c30)  lsSet(stdevCacheKey('30d'),  JSON.stringify(c30));
+    if(c252) lsSet(stdevCacheKey('252d'), JSON.stringify(c252));
+  }
+
+  const need7   = !c7   || c7.date   !== today   || !c7.data   || Object.values(c7.data).every(v=>v.s7==null);
+  const need30  = !c30  || c30.week  !== weekKey  || !c30.data  || Object.values(c30.data).every(v=>v.s30==null);
+  const need252 = !c252 || c252.month!== monthKey || !c252.data || Object.values(c252.data).every(v=>v.s252==null);
+
+  // Always load whatever data exists so it shows immediately (stale shown in red)
+  if(c7?.data)   Object.entries(c7.data).forEach(([t,v])=>{ if(!liveStdev[t]) liveStdev[t]={}; if(v.s7!=null)   liveStdev[t].s7=v.s7; });
+  if(c30?.data)  Object.entries(c30.data).forEach(([t,v])=>{ if(!liveStdev[t]) liveStdev[t]={}; if(v.s30!=null)  liveStdev[t].s30=v.s30; });
+  if(c252?.data) Object.entries(c252.data).forEach(([t,v])=>{ if(!liveStdev[t]) liveStdev[t]={}; if(v.s252!=null) liveStdev[t].s252=v.s252; });
+
+  return { need7, need30, need252 };
 }
 
 async function fetchStdevForTicker(ticker){
@@ -1121,35 +1150,107 @@ async function fetchStdevForTicker(ticker){
   }catch(e){ console.log(`[stdev] error for ${ticker}:`, e); }
 }
 
+// ── Clean stdev cache — remove tickers no longer in holdings ──────────────
+async function cleanStdevCache(){
+  const activeTickers = new Set(
+    HOLDINGS.map(h=>h.t).filter(t=>!CASH_TICKERS.includes(t))
+  );
+
+  const periods = [
+    { key: '7d',   lsKey: stdevCacheKey('7d')   },
+    { key: '30d',  lsKey: stdevCacheKey('30d')  },
+    { key: '252d', lsKey: stdevCacheKey('252d') },
+  ];
+
+  for(const {key, lsKey} of periods){
+    // Check localStorage
+    const cached = JSON.parse(lsGet(lsKey) || 'null');
+    if(cached?.data){
+      const stale = Object.keys(cached.data).filter(t => !activeTickers.has(t));
+      if(stale.length > 0){
+        console.log(`[stdev] cleanup removing from ${key}:`, stale);
+        stale.forEach(t => delete cached.data[t]);
+        lsSet(lsKey, JSON.stringify(cached));
+        // Also remove from liveStdev
+        stale.forEach(t => { if(liveStdev[t]) delete liveStdev[t]; });
+        // Save cleaned version to Firebase
+        if(window._fbSaveStdev) await window._fbSaveStdev(key, cached);
+      }
+    }
+  }
+}
+
 async function fetchAllStdev(){
   console.log('[stdev] fetchAllStdev called');
-  const {need7, need30, need252} = loadStdevCache();
+  const {need7, need30, need252} = await loadStdevCache();
   console.log('[stdev] need7:', need7, 'need30:', need30, 'need252:', need252);
-  if(!need7 && !need30 && !need252){ renderToday(); return; }
 
-  const tickers = [...new Set(HOLDINGS.map(h=>h.t))].filter(t=>!CASH_TICKERS.includes(t));
+  // Bootstrap: if cache is fresh but Firebase doesn't have it yet, push it up
+  if(window._fbSaveStdev && window._fbLoadStdev){
+    const today    = new Date().toISOString().slice(0,10);
+    const weekKey  = (() => { const d=new Date(); d.setDate(d.getDate()-d.getDay()); return d.toISOString().slice(0,10); })();
+    const monthKey = new Date().toISOString().slice(0,7);
+    const check = async (period, localKey, freshCheck) => {
+      const local = JSON.parse(lsGet(stdevCacheKey(localKey)) || 'null');
+      if(local && freshCheck(local)){
+        const remote = await window._fbLoadStdev(period);
+        if(!remote || !freshCheck(remote)){
+          console.log(`[stdev] bootstrapping ${period} to Firebase`);
+          await window._fbSaveStdev(period, local);
+        }
+      }
+    };
+    await check('7d',   '7d',   c => c.date   === today);
+    await check('30d',  '30d',  c => c.week   === weekKey);
+    await check('252d', '252d', c => c.month  === monthKey);
+  }
+
+  if(!need7 && !need30 && !need252){
+    // Still run cleanup even if no refresh needed
+    await cleanStdevCache();
+    renderToday();
+    return;
+  }
+
+  const tickers  = [...new Set(HOLDINGS.map(h=>h.t))].filter(t=>!CASH_TICKERS.includes(t));
   const today    = new Date().toISOString().slice(0,10);
   const weekKey  = (() => { const d=new Date(); d.setDate(d.getDate()-d.getDay()); return d.toISOString().slice(0,10); })();
   const monthKey = new Date().toISOString().slice(0,7);
 
-  // Mark all as stale so existing cached values show in red
+  // Mark all stale so existing cached values show in red
   tickers.forEach(t => stdevStale.add(t));
-  renderToday(); // show stale data in red immediately
+  renderToday();
 
   for(const t of tickers){
     await fetchStdevForTicker(t);
-    stdevStale.delete(t); // mark fresh
+    stdevStale.delete(t);
     renderToday();
     await delay(8000); // Twelve Data free tier: 8 calls/min
   }
 
-  const mk = t => ({ s7: liveStdev[t]?.s7, s30: liveStdev[t]?.s30, s252: liveStdev[t]?.s252 });
-  const data = Object.fromEntries(tickers.map(t=>[t, mk(t)]));
-  if(need7)   lsSet(stdevCacheKey('7d'),   JSON.stringify({date:today,   data}));
-  if(need30)  lsSet(stdevCacheKey('30d'),  JSON.stringify({week:weekKey,  data}));
-  if(need252) lsSet(stdevCacheKey('252d'), JSON.stringify({month:monthKey,data}));
+  // Save updated periods to both localStorage and Firebase — each only stores its own field
+  const mk7   = t => ({ s7:   liveStdev[t]?.s7   ?? null });
+  const mk30  = t => ({ s30:  liveStdev[t]?.s30  ?? null });
+  const mk252 = t => ({ s252: liveStdev[t]?.s252 ?? null });
+
+  if(need7){
+    const payload = {date:today, data: Object.fromEntries(tickers.map(t=>[t, mk7(t)]))};
+    lsSet(stdevCacheKey('7d'), JSON.stringify(payload));
+    if(window._fbSaveStdev) window._fbSaveStdev('7d', payload);
+  }
+  if(need30){
+    const payload = {week:weekKey, data: Object.fromEntries(tickers.map(t=>[t, mk30(t)]))};
+    lsSet(stdevCacheKey('30d'), JSON.stringify(payload));
+    if(window._fbSaveStdev) window._fbSaveStdev('30d', payload);
+  }
+  if(need252){
+    const payload = {month:monthKey, data: Object.fromEntries(tickers.map(t=>[t, mk252(t)]))};
+    lsSet(stdevCacheKey('252d'), JSON.stringify(payload));
+    if(window._fbSaveStdev) window._fbSaveStdev('252d', payload);
+  }
 
   renderToday();
+  await cleanStdevCache();
 }
 
 async function initialLoad(){
@@ -1210,7 +1311,7 @@ async function initialLoad(){
   const missed=failedTickers.length;
   if(missed>0) showErr(`${missed} ticker${missed>1?'s':''} could not be fetched and are excluded from totals (${failedTickers.join(', ')}).`);
 
-  updateAsOf(); loadStdevCache(); renderToday(); fetchIndices(); fetchAllStdev();
+  updateAsOf(); await loadStdevCache(); renderToday(); fetchIndices(); fetchAllStdev();
 }
 
 // ── Refresh prices only ────────────────────────────────────────────────────
