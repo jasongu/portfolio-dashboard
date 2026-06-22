@@ -1,25 +1,16 @@
 {
-  "name": "Portfolio Dashboard",
+  "name": "Portfolio · Ivalice Ledger",
   "short_name": "Portfolio",
-  "description": "Personal investment portfolio tracker — Brokerage + Retirement IRA",
-  "start_url": "/portfolio-dashboard",
-  "scope": "/portfolio-dahsboard",
+  "description": "Personal investment portfolio dashboard",
+  "start_url": ".",
+  "scope": ".",
   "display": "standalone",
-  "background_color": "#eeede8",
-  "theme_color": "#185FA5",
-  "orientation": "any",
+  "background_color": "#0a0c10",
+  "theme_color": "#0a0c10",
   "icons": [
-    {
-      "src": "icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

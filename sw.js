@@ -1,53 +1,55 @@
-// Portfolio Dashboard — Service Worker
-// Caches the app shell for instant load; Finnhub API calls always go network-first.
-
-const CACHE = 'portfolio-v1';
+/* Service worker for the Portfolio dashboard PWA.
+   Bump CACHE on each release (match your YYMMDD_N version) to retire old caches. */
+const CACHE = 'ivalice-ledger-260617_1';
 const SHELL = [
   './',
   './index.html',
-  'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js'
+  './manifest.json',
+  './icon-32.png',
+  './icon-192.png',
+  './icon-512.png'
 ];
 
-// Install: cache app shell
 self.addEventListener('install', e => {
-  e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())
-  );
+  self.skipWaiting();
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).catch(() => {}));
 });
 
-// Activate: delete old caches
 self.addEventListener('activate', e => {
   e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
 });
 
-// Fetch strategy:
-//   - Finnhub & Anthropic API → network only (live data, never cache)
-//   - Everything else → cache first, fallback to network
 self.addEventListener('fetch', e => {
-  const url = e.request.url;
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
 
-  // Always go network for live API calls
-  if (url.includes('finnhub.io') || url.includes('anthropic.com')) {
-    e.respondWith(fetch(e.request));
+  // Let everything cross-origin (Finnhub, Twelve Data, Firebase, fonts, CDNs) hit the
+  // network untouched — never cache or block live data.
+  if (url.origin !== self.location.origin) return;
+
+  // The page itself: network-first so new deploys appear immediately; cache only as
+  // an offline fallback.
+  if (req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html')) {
+    e.respondWith(
+      fetch(req)
+        .then(res => { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); return res; })
+        .catch(() => caches.match(req).then(r => r || caches.match('./index.html')))
+    );
     return;
   }
 
-  // Cache-first for app shell
+  // Same-origin static assets (icons, manifest): serve fast from cache, refresh in background.
   e.respondWith(
-    caches.match(e.request).then(cached => {
-      if (cached) return cached;
-      return fetch(e.request).then(res => {
-        // Cache successful GET responses for the app shell
-        if (res.ok && e.request.method === 'GET') {
-          const clone = res.clone();
-          caches.open(CACHE).then(c => c.put(e.request, clone));
-        }
-        return res;
-      });
+    caches.match(req).then(cached => {
+      const network = fetch(req)
+        .then(res => { caches.open(CACHE).then(c => c.put(req, res.clone())); return res; })
+        .catch(() => cached);
+      return cached || network;
     })
   );
 });
