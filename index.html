@@ -68,8 +68,8 @@
   /* narrow displays (e.g. Galaxy Fold cover): keep top boxes on one line, shrink box + text */
   @media (max-width:600px){
     #app { padding:16px 12px 44px; }
-    .top-strip { grid-template-columns:repeat(3,1fr); gap:7px; }
-    .top-strip .panel { padding:10px 8px; }
+    .top-strip { grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; }
+    .top-strip .panel { padding:10px 8px; min-width:0; }
     .top-val { font-size:17px; }
     .statcard { padding:11px 11px; }
     .statcard .big { font-size:17px; }
@@ -85,10 +85,10 @@
 <script>
 /* ============================================================================
    PORTFOLIO DASHBOARD — FFXII / Ivalice Ledger reskin
-   Version: 260624_6   (filename: portfolio_dashboard_v260624_6.html)
+   Version: 260624_7   (filename: portfolio_dashboard_v260624_7.html)
    Scheme:  YYMMDD_N
    ============================================================================ */
-const VERSION = '260624_6';
+const VERSION = '260624_7';
 console.log('%cPortfolio Dashboard loaded — version ' + VERSION,
             'color:#cdbf95;font-weight:700;font-size:13px;');
 
@@ -916,6 +916,7 @@ const liveTickers = () => [...new Set(HOLDINGS.map(h=>h.t).filter(t=>!CASH_TICKE
 
 async function fetchPrices(force){
   if(!CONFIG.FINNHUB_KEY) return;
+  await fetchIndices();   // indices first so the holdings + metrics burst doesn't starve them (Finnhub free tier)
   for(const t of liveTickers()){
     try{
       const r = await fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(t)}&token=${CONFIG.FINNHUB_KEY}`);
@@ -924,7 +925,6 @@ async function fetchPrices(force){
     }catch(e){}
   }
   render();
-  fetchIndices();
 }
 async function fetchMetrics(force){
   if(!CONFIG.FINNHUB_KEY) return;
