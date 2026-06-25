@@ -1,6 +1,6 @@
 /* Service worker for the Portfolio dashboard PWA.
    Bump CACHE on each release (match your YYMMDD_N version) to retire old caches. */
-const CACHE = 'ledger-260625_4';
+const CACHE = 'ledger-260625_5';
 const SHELL = [
   './',
   './index.html',

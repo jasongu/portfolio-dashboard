@@ -85,10 +85,10 @@
 <script>
 /* ============================================================================
    PORTFOLIO DASHBOARD — FFXII / Ivalice Ledger reskin
-   Version: 260625_4   (filename: portfolio_dashboard_v260625_4.html)
+   Version: 260625_5   (filename: portfolio_dashboard_v260625_5.html)
    Scheme:  YYMMDD_N
    ============================================================================ */
-const VERSION = '260625_4';
+const VERSION = '260625_5';
 console.log('%cPortfolio Dashboard loaded — version ' + VERSION,
             'color:#cdbf95;font-weight:700;font-size:13px;');
 
@@ -160,6 +160,8 @@ const state = {
   chart: { open:false, t:null, range:'6M' },
   chat: [{ role:'analyst', text:'Welcome back, traveler. Your ledger is balanced. Ask me anything about your positions.' }],
   quotes: {},   // t -> { price, prev, beta, pe }
+  pricesServerAt: null,   // ms: when the scheduled Cloud Function last wrote portfolio/prices
+  pricesLocalAt: null,    // ms: when the client last pulled prices directly from Finnhub (Refresh button)
   stdev:  {},   // t -> { w, m, y }
   news:   [],
   indices:[],   // { k, name, v, chg }
@@ -408,7 +410,8 @@ function todayHTML(d){
         <span style="font-family:'Cinzel',serif;font-size:12px;letter-spacing:.16em;color:var(--frame);">POSITIONS</span>
         <span style="font-size:11px;color:var(--dim);">${d.byTicker.length} held</span>
       </div>
-      <div style="display:flex;gap:8px;">
+      <div style="display:flex;gap:10px;align-items:center;">
+        ${priceStampHTML()}
         <span class="chip" id="refreshPrices">&#8635; Prices</span>
       </div>
     </div>
@@ -857,7 +860,7 @@ async function initFirebase(){
 /* Firestore helpers — same schema as the old app (JSON in a `data` field) */
 const FB = {
   async loadHoldings(){ const {doc,getDoc}=db.fs; const s=await getDoc(doc(db.ref,'portfolio','holdings')); return s.exists()?JSON.parse(s.data().data):null; },
-  async loadPrices(){ const {doc,getDoc}=db.fs; const s=await getDoc(doc(db.ref,'portfolio','prices')); return s.exists()?JSON.parse(s.data().data):null; },
+  async loadPrices(){ const {doc,getDoc}=db.fs; const s=await getDoc(doc(db.ref,'portfolio','prices')); return s.exists()?Object.assign(JSON.parse(s.data().data),{updatedAt:s.data().updatedAt}):null; },
   async loadMarketHolidays(){ const {doc,getDoc}=db.fs; const s=await getDoc(doc(db.ref,'portfolio','holidays')); return s.exists()?JSON.parse(s.data().data):null; },
   async saveHoldings(arr){ const {doc,setDoc}=db.fs; await setDoc(doc(db.ref,'portfolio','holdings'),{data:JSON.stringify(arr),updatedAt:Date.now()}); },
   async loadStdev(p){ const {doc,getDoc}=db.fs; const s=await getDoc(doc(db.ref,'portfolio',`stdev_${p}`)); return s.exists()?JSON.parse(s.data().data):null; },
@@ -948,6 +951,7 @@ async function fetchPrices(force){
       if(j && j.c){ state.quotes[t] = { ...(state.quotes[t]||{}), price:j.c, prev:j.pc||j.c }; }
     }catch(e){}
   }
+  state.pricesLocalAt = Date.now();   // manual Refresh / fallback pulled straight from Finnhub (not saved to server)
   render();
 }
 
@@ -985,11 +989,24 @@ function isMarketOpenET(d = new Date()){
   const mins = (+p.hour)*60 + (+p.minute);
   return mins >= 570 && mins < 960;                           // 09:30–16:00 ET
 }
+function fmtStamp(ms){
+  if(!ms) return '—';
+  const d = new Date(ms), now = new Date();
+  const t = d.toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
+  return d.toDateString()===now.toDateString() ? t : d.toLocaleDateString([], { month:'short', day:'numeric' })+' '+t;
+}
+function priceStampHTML(){
+  const s = state.pricesServerAt || 0, l = state.pricesLocalAt || 0;
+  if(!s && !l) return `<span style="font-size:10px;color:var(--dim);white-space:nowrap;">updated · —</span>`;
+  const manual = l >= s;                       // whichever fired most recently wins
+  return `<span style="font-size:10px;color:var(--dim);white-space:nowrap;">updated ${fmtStamp(manual?l:s)} · ${manual?'manual':'sched'}</span>`;
+}
 async function loadPricesFromFirestore(){
   if(!db) return false;
   try{
     const p = await FB.loadPrices();
     if(p){
+      if(p.updatedAt) state.pricesServerAt = p.updatedAt;
       if(p.quotes) for(const [t,v] of Object.entries(p.quotes)){
         if(v && typeof v.price==='number') state.quotes[t] = { ...(state.quotes[t]||{}), price:v.price, prev:(v.prev!=null?v.prev:v.price) };
       }
