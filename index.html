@@ -85,10 +85,10 @@
 <script>
 /* ============================================================================
    PORTFOLIO DASHBOARD — FFXII / Ivalice Ledger reskin
-   Version: 260624_11   (filename: portfolio_dashboard_v260624_11.html)
+   Version: 260625_4   (filename: portfolio_dashboard_v260625_4.html)
    Scheme:  YYMMDD_N
    ============================================================================ */
-const VERSION = '260624_11';
+const VERSION = '260625_4';
 console.log('%cPortfolio Dashboard loaded — version ' + VERSION,
             'color:#cdbf95;font-weight:700;font-size:13px;');
 
@@ -410,7 +410,6 @@ function todayHTML(d){
       </div>
       <div style="display:flex;gap:8px;">
         <span class="chip" id="refreshPrices">&#8635; Prices</span>
-        <span class="chip" id="refreshBeta">&#8635; Beta &amp; P/E</span>
       </div>
     </div>
     <div class="scrollx"><div style="min-width:700px;">
@@ -695,7 +694,6 @@ function wire(d){
   document.querySelectorAll('.t-row').forEach(r => r.onclick = () => { state.chart={ open:true, t:r.dataset.ticker, range:'6M' }; render(); });
 
   const rp = document.getElementById('refreshPrices'); if(rp) rp.onclick = () => fetchPrices(true);
-  const rb = document.getElementById('refreshBeta');   if(rb) rb.onclick = () => fetchMetrics(true);
   const rn = document.getElementById('refreshNews');   if(rn) rn.onclick = () => fetchNews(true);
 
   // news links
@@ -859,6 +857,8 @@ async function initFirebase(){
 /* Firestore helpers — same schema as the old app (JSON in a `data` field) */
 const FB = {
   async loadHoldings(){ const {doc,getDoc}=db.fs; const s=await getDoc(doc(db.ref,'portfolio','holdings')); return s.exists()?JSON.parse(s.data().data):null; },
+  async loadPrices(){ const {doc,getDoc}=db.fs; const s=await getDoc(doc(db.ref,'portfolio','prices')); return s.exists()?JSON.parse(s.data().data):null; },
+  async loadMarketHolidays(){ const {doc,getDoc}=db.fs; const s=await getDoc(doc(db.ref,'portfolio','holidays')); return s.exists()?JSON.parse(s.data().data):null; },
   async saveHoldings(arr){ const {doc,setDoc}=db.fs; await setDoc(doc(db.ref,'portfolio','holdings'),{data:JSON.stringify(arr),updatedAt:Date.now()}); },
   async loadStdev(p){ const {doc,getDoc}=db.fs; const s=await getDoc(doc(db.ref,'portfolio',`stdev_${p}`)); return s.exists()?JSON.parse(s.data().data):null; },
   async saveStdev(p,payload){ const {doc,setDoc}=db.fs; await setDoc(doc(db.ref,'portfolio',`stdev_${p}`),{data:JSON.stringify(payload),updatedAt:Date.now()}); },
@@ -884,6 +884,32 @@ function rebuildCashTickers(){
   });
 }
 
+/* Fold any separate sweep / deposit-sweep / JPMPD line into the account's
+   US Dollar position (CASH for brokerage, RCASH for retirement) so cash shows
+   as a single row. Returns true if anything was merged. */
+function foldSweepsIntoCash(){
+  const isSweep = h => {
+    if(h.t==='CASH'||h.t==='RCASH') return false;             // canonical cash lines are the merge targets, not sweeps
+    const nm = (h.name||'').toLowerCase();
+    return h.t==='JPMPD' || ['QACDS','QDERQ','CWMPD','QAJDS'].includes(h.t)
+        || nm.includes('sweep') || nm.includes('deposit sweep') || nm.includes('premium deposit');
+  };
+  const sweeps = HOLDINGS.filter(isSweep);
+  if(!sweeps.length) return false;
+  for(const s of sweeps){
+    const acct    = s.acct==='ira' ? 'ira' : 'brok';
+    const ct      = acct==='ira' ? 'RCASH' : 'CASH';
+    const dollars = (+s.shares||0) * (+s.cost||1);            // cash cost=1 → shares are the dollar balance
+    let cash = HOLDINGS.find(h => h.t===ct);
+    if(!cash){ cash = { t:ct, name:'US Dollar', shares:0, cost:1, acct }; HOLDINGS.push(cash); }
+    cash.shares = +((+cash.shares||0) + dollars).toFixed(2);
+    cash.name   = 'US Dollar';
+  }
+  for(let i=HOLDINGS.length-1; i>=0; i--){ if(isSweep(HOLDINGS[i])) HOLDINGS.splice(i,1); }
+  console.log('[holdings] folded', sweeps.length, 'sweep line(s) into US Dollar');
+  return true;
+}
+
 /* Firestore is the source of truth when a holdings doc exists; the embedded
    HOLDINGS array is only the seed/fallback (matches portfolio_dashboard_v260610_1). */
 async function loadHoldingsFromFirestore(){
@@ -893,9 +919,11 @@ async function loadHoldingsFromFirestore(){
     if(remote && remote.length){
       HOLDINGS.length = 0;
       remote.forEach(r => HOLDINGS.push(normHolding(r)));
+      const folded = foldSweepsIntoCash();
       rebuildCashTickers();
       seedQuotes();
       console.log('[firebase] loaded', remote.length, 'holdings (Firestore is source of truth)');
+      if(folded) saveHoldings();   // persist the merged US Dollar line so the sweep stays folded
       return true;
     }
     console.log('[firebase] no holdings doc — using embedded HOLDINGS as seed/fallback');
@@ -922,10 +950,67 @@ async function fetchPrices(force){
   }
   render();
 }
-/* ---- Beta + P/E cache (portfolio/metrics): fetched at most once per calendar day ---- */
-function metricsFresh(updatedAt){
-  return !!updatedAt && new Date(updatedAt).toDateString() === new Date().toDateString();
+
+/* ----------------------------------------------------------------------------
+   SERVER-SIDE PRICES  — a scheduled Cloud Function (functions/index.js) polls
+   Finnhub every 5 min while the market is open and writes the `portfolio/prices`
+   doc { quotes:{t:{price,prev}}, indices:[{k,name,c,pc}] }. The client reads that
+   doc (cache-first) and re-checks it every 2 minutes during market hours. Direct
+   Finnhub fetch (fetchPrices above) stays only as a fallback before the function
+   has written, mirroring the rates/term-premia design.
+---------------------------------------------------------------------------- */
+/* US equity-market full-day closures (NYSE/NASDAQ). This is a seed/fallback —
+   the Cloud Function computes each year's schedule and writes `portfolio/holidays`,
+   which loadMarketHolidaysFromFirestore() merges in at boot so the list stays
+   current without editing this file. Early-close half-days are not included. */
+const MARKET_HOLIDAYS = new Set([
+  '2026-01-01','2026-01-19','2026-02-16','2026-04-03','2026-05-25','2026-06-19','2026-07-03','2026-09-07','2026-11-26','2026-12-25',
+  '2027-01-01','2027-01-18','2027-02-15','2027-03-26','2027-05-31','2027-06-18','2027-07-05','2027-09-06','2027-11-25','2027-12-24'
+]);
+async function loadMarketHolidaysFromFirestore(){
+  if(!db) return;
+  try{
+    const arr = await FB.loadMarketHolidays();
+    if(Array.isArray(arr) && arr.length){
+      arr.forEach(d => MARKET_HOLIDAYS.add(d));
+      console.log('[holidays] merged', arr.length, 'market-closure dates from Firestore');
+    }
+  }catch(e){ console.warn('[holidays] load failed', e); }
 }
+function isMarketOpenET(d = new Date()){
+  const p = new Intl.DateTimeFormat('en-US',{ timeZone:'America/New_York', year:'numeric', month:'2-digit', day:'2-digit', weekday:'short', hour:'2-digit', minute:'2-digit', hour12:false })
+    .formatToParts(d).reduce((a,x)=>(a[x.type]=x.value,a),{});
+  if(p.weekday==='Sat'||p.weekday==='Sun') return false;
+  if(MARKET_HOLIDAYS.has(`${p.year}-${p.month}-${p.day}`)) return false;
+  const mins = (+p.hour)*60 + (+p.minute);
+  return mins >= 570 && mins < 960;                           // 09:30–16:00 ET
+}
+async function loadPricesFromFirestore(){
+  if(!db) return false;
+  try{
+    const p = await FB.loadPrices();
+    if(p){
+      if(p.quotes) for(const [t,v] of Object.entries(p.quotes)){
+        if(v && typeof v.price==='number') state.quotes[t] = { ...(state.quotes[t]||{}), price:v.price, prev:(v.prev!=null?v.prev:v.price) };
+      }
+      if(Array.isArray(p.indices) && p.indices.length){
+        state.indices = p.indices.map(ix => { const chg = ix.pc ? (ix.c-ix.pc)/ix.pc : 0;
+          return { k:ix.k, name:ix.name, v: ix.c?ix.c.toFixed(2):'—', chg: pct(chg), up: chg }; });
+      }
+      render();
+      return true;
+    }
+  }catch(e){ console.warn('[prices] Firestore load failed', e); }
+  return false;
+}
+let pricePoll = null;
+function startPricePolling(){
+  if(pricePoll) return;
+  pricePoll = setInterval(() => { if(isMarketOpenET()) loadPricesFromFirestore(); }, 2*60*1000);
+  console.log('[prices] polling Firestore every 2 minutes while the market is open');
+}
+/* ---- Beta + P/E (portfolio/metrics): read-only. The Cloud Function computes
+   these daily from Finnhub; the client only reads the cached doc. ---- */
 async function loadMetricsFromFirestore(){
   if(!db) return null;
   try{
@@ -934,32 +1019,12 @@ async function loadMetricsFromFirestore(){
       Object.entries(m.map).forEach(([t,v]) => {
         state.quotes[t] = { ...(state.quotes[t]||{}), beta:v.beta||0, pe:v.pe||0 };
       });
-      console.log('[metrics] loaded', Object.keys(m.map).length, 'cached beta/PE from', new Date(m.updatedAt).toLocaleDateString());
+      console.log('[metrics] loaded', Object.keys(m.map).length, 'beta/PE from Firestore (server computes these)');
       return m.updatedAt;
     }
-    console.log('[metrics] no cache yet — fetching from Finnhub');
+    console.log('[metrics] no cache yet — the scheduled function will populate portfolio/metrics');
   }catch(e){ console.warn('[metrics] Firestore load failed', e); }
   return null;
-}
-async function saveMetrics(map){
-  if(!db || !Object.keys(map).length) return;
-  try{ await FB.saveMetrics(map); console.log('[metrics] cached', Object.keys(map).length, 'beta/PE to Firestore'); }
-  catch(e){ console.warn('[metrics] save failed', e); }
-}
-async function fetchMetrics(force){
-  if(!CONFIG.FINNHUB_KEY) return;
-  const map = {};
-  for(const t of liveTickers()){
-    try{
-      const r = await fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${encodeURIComponent(t)}&metric=all&token=${CONFIG.FINNHUB_KEY}`);
-      const j = await r.json(); const m = j && j.metric || {};
-      const beta = m.beta||0, pe = m.peNormalizedAnnual||m.peTTM||0;
-      state.quotes[t] = { ...(state.quotes[t]||{}), beta, pe };
-      map[t] = { beta, pe };
-    }catch(e){}
-  }
-  render();
-  saveMetrics(map);   // write the day's beta/PE cache so other loads today skip Finnhub
 }
 async function fetchIndices(){
   if(!CONFIG.FINNHUB_KEY) return;
@@ -987,7 +1052,24 @@ async function fetchNews(force){
     render();
   }catch(e){}
 }
-function refreshAll(){ fetchPrices(); fetchMetrics(); fetchNews(); fetchAllStdev(); fetchRates(); }
+function refreshAll(){ fetchPrices(); fetchNews(); fetchRates(); reloadServerData(); }
+/* After an import the holdings doc changed; poke the server's HTTPS endpoints so
+   it refreshes prices/beta/PE/std-dev for the new tickers (best-effort — the
+   scheduled jobs catch up regardless), then re-read everything from Firestore.
+   The client itself never calls Finnhub/Twelve Data for these. */
+const fnUrl = name => `https://us-central1-${CONFIG.FIREBASE.projectId}.cloudfunctions.net/${name}`;
+function triggerServerRefresh(){
+  ['updatePricesNow','updateMetricsNow','updateStdevNow'].forEach(n => { fetch(fnUrl(n)).catch(()=>{}); });
+}
+async function reloadServerData(){
+  triggerServerRefresh();
+  await loadPricesFromFirestore();
+  await loadMetricsFromFirestore();
+  await loadStdevForDisplay();
+  render();
+  // prices + beta/PE come back fast; re-read shortly to pick them up (std-dev is slower)
+  setTimeout(async () => { await loadPricesFromFirestore(); await loadMetricsFromFirestore(); await loadStdevForDisplay(); }, 20000);
+}
 
 /* ----------------------------------------------------------------------------
    Rate boxes — both yields and term premia come from FRED via the
@@ -1033,24 +1115,15 @@ async function fetchRates(){
 }
 
 /* ============================================================================
-   STANDARD DEVIATION  — Firebase-first, per-ticker staleness (ported from old file)
-   liveStdev[t] = { s7, s30, s252 } where each is the sample std-dev of the last
-   7 / 30 / 252 daily LOG returns. Displayed as (value*100).toFixed(2)+'%'.
-   Staleness: s7 daily, s30 weekly, s252 monthly. outputsize scales to the
-   longest stale window (10 / 35 / 260 bars). Firebase updated after each ticker.
-   Firestore docs: portfolio/stdev_7d , stdev_30d , stdev_252d
+   STANDARD DEVIATION + MOVING AVERAGES — read-only.
+   The Cloud Function (functions/index.js) computes these on the same cadence the
+   client used to (7d daily, 30d weekly, 252d monthly) and writes
+   portfolio/stdev_7d / 30d / 252d. The client only loads + displays them.
+   liveStdev[t] = { s7, ma7, s30, ma30, s252, ma252 }; shown as (value*100).toFixed(2)+'%'.
    ============================================================================ */
 const liveStdev = {};
 const STDEV_DOCS = {};
-const stdevStale = new Set();
-const delay = ms => new Promise(r => setTimeout(r, ms));
-function stddev(arr){ if(!arr||arr.length<2) return null; const m=arr.reduce((a,b)=>a+b,0)/arr.length; const v=arr.reduce((s,x)=>s+(x-m)**2,0)/(arr.length-1); return Math.sqrt(v); }
-function stdevPeriodKey(){
-  const today    = new Date().toISOString().slice(0,10);
-  const weekKey  = (()=>{ const d=new Date(); d.setDate(d.getDate()-d.getDay()); return d.toISOString().slice(0,10); })();
-  const monthKey = new Date().toISOString().slice(0,7);
-  return { today, weekKey, monthKey };
-}
+const stdevStale = new Set();   // kept for render(); no longer populated (server computes std-dev)
 async function loadAllStdevFromFirebase(){
   if(!db) return;
   await Promise.all(['7d','30d','252d'].map(async p => {
@@ -1066,98 +1139,9 @@ async function loadAllStdevFromFirebase(){
     }
   };
   pull('7d','s7','ma7'); pull('30d','s30','ma30'); pull('252d','s252','ma252');
-  console.log('[stdev] loaded from Firebase:', Object.keys(liveStdev).length, 'tickers');
+  console.log('[stdev] loaded', Object.keys(liveStdev).length, 'tickers from Firestore (server computes these)');
 }
-function getStaleTickersForPeriod(period){
-  const { today, weekKey, monthKey } = stdevPeriodKey();
-  const ua = (STDEV_DOCS[period]||{}).updatedAt || {};
-  const tickers = [...new Set(HOLDINGS.map(h=>h.t))].filter(t=>!CASH_TICKERS.includes(t));
-  return tickers.filter(t => {
-    const ts = ua[t];
-    if(!ts) return true;
-    if(period==='7d')   return ts !== today;
-    if(period==='30d')  return ts !== weekKey;
-    if(period==='252d') return ts !== monthKey;
-    return true;
-  });
-}
-async function fetchAndSaveStdevForTicker(ticker, stale7, stale30, stale252){
-  if(CASH_TICKERS.includes(ticker)) return false;
-  let outputsize = 10;
-  if(stale30)  outputsize = 35;
-  if(stale252) outputsize = 260;
-  for(let attempt=0; attempt<=2; attempt++){
-    try{
-      if(attempt>0) await delay(8000);
-      const url = `https://api.twelvedata.com/time_series?symbol=${ticker}&interval=1day&outputsize=${outputsize}&apikey=${CONFIG.TWELVE_KEY}`;
-      console.log(`[stdev] fetching ${ticker} (outputsize=${outputsize})${attempt>0?` retry ${attempt}`:''}`);
-      const r = await fetch(url, { signal:AbortSignal.timeout(10000) });
-      const d = await r.json();
-      if(!d || d.status==='error' || !d.values || d.values.length < 8){ continue; }
-      const closes = [...d.values].reverse().map(v=>parseFloat(v.close));
-      const rets = [];
-      for(let i=1;i<closes.length;i++) rets.push(Math.log(closes[i]/closes[i-1]));
-      liveStdev[ticker] = liveStdev[ticker] || {};
-      const mean = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
-      if(stale7)   { const s=stddev(rets.slice(-7));   if(s!=null) liveStdev[ticker].s7=s;   const m=mean(closes.slice(-7));   if(m!=null) liveStdev[ticker].ma7=m; }
-      if(stale30)  { const s=stddev(rets.slice(-30));  if(s!=null) liveStdev[ticker].s30=s;  const m=mean(closes.slice(-30));  if(m!=null) liveStdev[ticker].ma30=m; }
-      if(stale252) { const s=stddev(rets.slice(-252)); if(s!=null) liveStdev[ticker].s252=s; const m=mean(closes.slice(-252)); if(m!=null) liveStdev[ticker].ma252=m; }
-      const { today, weekKey, monthKey } = stdevPeriodKey();
-      const updates = [
-        stale7   && ['7d',   ['s7','ma7'],     today],
-        stale30  && ['30d',  ['s30','ma30'],   weekKey],
-        stale252 && ['252d', ['s252','ma252'], monthKey],
-      ].filter(Boolean);
-      for(const [p, fields, ts] of updates){
-        STDEV_DOCS[p] = STDEV_DOCS[p] || { updatedAt:{}, data:{} };
-        STDEV_DOCS[p].data = STDEV_DOCS[p].data || {};
-        STDEV_DOCS[p].updatedAt = STDEV_DOCS[p].updatedAt || {};
-        STDEV_DOCS[p].data[ticker] = STDEV_DOCS[p].data[ticker] || {};
-        for(const f of fields){ STDEV_DOCS[p].data[ticker][f] = liveStdev[ticker]?.[f] ?? null; }
-        STDEV_DOCS[p].updatedAt[ticker] = ts;
-        if(db) FB.saveStdev(p, STDEV_DOCS[p]);
-      }
-      return true;
-    }catch(e){ console.log(`[stdev] error ${ticker} attempt ${attempt}:`, e); }
-  }
-  return false;
-}
-async function cleanStdevCache(){
-  const active = new Set(HOLDINGS.map(h=>h.t).filter(t=>!CASH_TICKERS.includes(t)));
-  for(const p of ['7d','30d','252d']){
-    const doc = STDEV_DOCS[p];
-    if(!doc?.data) continue;
-    const removed = Object.keys(doc.data).filter(t=>!active.has(t));
-    if(removed.length){
-      console.log(`[stdev] cleanup ${p}:`, removed);
-      removed.forEach(t=>{ delete doc.data[t]; delete doc.updatedAt[t]; delete liveStdev[t]; });
-      if(db) await FB.saveStdev(p, doc);
-    }
-  }
-}
-async function fetchAllStdev(){
-  if(!CONFIG.TWELVE_KEY){ return; }
-  // 1. Load everything from Firebase and display immediately
-  await loadAllStdevFromFirebase();
-  render();
-  // 2. Find which tickers are stale per period
-  const stale7   = getStaleTickersForPeriod('7d');
-  const stale30  = getStaleTickersForPeriod('30d');
-  const stale252 = getStaleTickersForPeriod('252d');
-  const staleAll = [...new Set([...stale7, ...stale30, ...stale252])];
-  console.log('[stdev] stale tickers:', staleAll);
-  if(staleAll.length === 0){ await cleanStdevCache(); return; }
-  // 3. Mark stale red, fetch one by one (8s gap → Twelve Data 8/min), save after each
-  staleAll.forEach(t => stdevStale.add(t));
-  render();
-  for(const t of staleAll){
-    await fetchAndSaveStdevForTicker(t, stale7.includes(t), stale30.includes(t), stale252.includes(t));
-    stdevStale.delete(t);
-    render();
-    await delay(8000);
-  }
-  await cleanStdevCache();
-}
+async function loadStdevForDisplay(){ await loadAllStdevFromFirebase(); render(); }
 
 /* ============================================================================
    BOOT
@@ -1167,14 +1151,17 @@ async function fetchAllStdev(){
   render();
   const ok = await initFirebase();
   if(ok) await loadHoldingsFromFirestore();   // Firestore wins when a holdings doc exists
+  if(ok) await loadMarketHolidaysFromFirestore();   // merge the function-computed closure dates
   render();
-  // live market data (Finnhub) + Firebase-first std-dev (Twelve Data tops up stale)
-  await fetchPrices();   // also refreshes the index strip
-  const metricsAt = await loadMetricsFromFirestore();   // beta/PE: cache-first
+  // live market data: server-side prices (Firestore) cache-first, with direct Finnhub fallback
+  const gotPrices = await loadPricesFromFirestore();
+  if(!gotPrices) await fetchPrices();               // function hasn't written portfolio/prices yet → direct fetch
+  else if(!state.indices.length) await fetchIndices();
+  startPricePolling();                              // re-read Firestore every 2 minutes while the market is open
+  await loadMetricsFromFirestore();                 // beta/PE: read-only (server computes daily)
   render();
-  if(!metricsFresh(metricsAt)) fetchMetrics();          // fetch from Finnhub at most once per calendar day
   fetchNews();
-  fetchAllStdev();
+  await loadStdevForDisplay();                       // std-dev/MA: read-only (server computes daily)
   fetchRates();
 })();
 </script>
