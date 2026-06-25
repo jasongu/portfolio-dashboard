@@ -85,10 +85,10 @@
 <script>
 /* ============================================================================
    PORTFOLIO DASHBOARD — FFXII / Ivalice Ledger reskin
-   Version: 260624_10   (filename: portfolio_dashboard_v260624_10.html)
+   Version: 260624_11   (filename: portfolio_dashboard_v260624_11.html)
    Scheme:  YYMMDD_N
    ============================================================================ */
-const VERSION = '260624_10';
+const VERSION = '260624_11';
 console.log('%cPortfolio Dashboard loaded — version ' + VERSION,
             'color:#cdbf95;font-weight:700;font-size:13px;');
 
@@ -862,6 +862,8 @@ const FB = {
   async saveHoldings(arr){ const {doc,setDoc}=db.fs; await setDoc(doc(db.ref,'portfolio','holdings'),{data:JSON.stringify(arr),updatedAt:Date.now()}); },
   async loadStdev(p){ const {doc,getDoc}=db.fs; const s=await getDoc(doc(db.ref,'portfolio',`stdev_${p}`)); return s.exists()?JSON.parse(s.data().data):null; },
   async saveStdev(p,payload){ const {doc,setDoc}=db.fs; await setDoc(doc(db.ref,'portfolio',`stdev_${p}`),{data:JSON.stringify(payload),updatedAt:Date.now()}); },
+  async loadMetrics(){ const {doc,getDoc}=db.fs; const s=await getDoc(doc(db.ref,'portfolio','metrics')); return s.exists()?{ map:JSON.parse(s.data().data), updatedAt:s.data().updatedAt }:null; },
+  async saveMetrics(map){ const {doc,setDoc}=db.fs; await setDoc(doc(db.ref,'portfolio','metrics'),{data:JSON.stringify(map),updatedAt:Date.now()}); },
 };
 
 /* normalize between the old field names (t/n/sh/ac/acct) and the new model */
@@ -920,16 +922,44 @@ async function fetchPrices(force){
   }
   render();
 }
+/* ---- Beta + P/E cache (portfolio/metrics): fetched at most once per calendar day ---- */
+function metricsFresh(updatedAt){
+  return !!updatedAt && new Date(updatedAt).toDateString() === new Date().toDateString();
+}
+async function loadMetricsFromFirestore(){
+  if(!db) return null;
+  try{
+    const m = await FB.loadMetrics();
+    if(m && m.map){
+      Object.entries(m.map).forEach(([t,v]) => {
+        state.quotes[t] = { ...(state.quotes[t]||{}), beta:v.beta||0, pe:v.pe||0 };
+      });
+      console.log('[metrics] loaded', Object.keys(m.map).length, 'cached beta/PE from', new Date(m.updatedAt).toLocaleDateString());
+      return m.updatedAt;
+    }
+    console.log('[metrics] no cache yet — fetching from Finnhub');
+  }catch(e){ console.warn('[metrics] Firestore load failed', e); }
+  return null;
+}
+async function saveMetrics(map){
+  if(!db || !Object.keys(map).length) return;
+  try{ await FB.saveMetrics(map); console.log('[metrics] cached', Object.keys(map).length, 'beta/PE to Firestore'); }
+  catch(e){ console.warn('[metrics] save failed', e); }
+}
 async function fetchMetrics(force){
   if(!CONFIG.FINNHUB_KEY) return;
+  const map = {};
   for(const t of liveTickers()){
     try{
       const r = await fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${encodeURIComponent(t)}&metric=all&token=${CONFIG.FINNHUB_KEY}`);
       const j = await r.json(); const m = j && j.metric || {};
-      state.quotes[t] = { ...(state.quotes[t]||{}), beta: m.beta||0, pe: m.peNormalizedAnnual||m.peTTM||0 };
+      const beta = m.beta||0, pe = m.peNormalizedAnnual||m.peTTM||0;
+      state.quotes[t] = { ...(state.quotes[t]||{}), beta, pe };
+      map[t] = { beta, pe };
     }catch(e){}
   }
   render();
+  saveMetrics(map);   // write the day's beta/PE cache so other loads today skip Finnhub
 }
 async function fetchIndices(){
   if(!CONFIG.FINNHUB_KEY) return;
@@ -1140,7 +1170,9 @@ async function fetchAllStdev(){
   render();
   // live market data (Finnhub) + Firebase-first std-dev (Twelve Data tops up stale)
   await fetchPrices();   // also refreshes the index strip
-  fetchMetrics();
+  const metricsAt = await loadMetricsFromFirestore();   // beta/PE: cache-first
+  render();
+  if(!metricsFresh(metricsAt)) fetchMetrics();          // fetch from Finnhub at most once per calendar day
   fetchNews();
   fetchAllStdev();
   fetchRates();
