@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0a0c10">
-<title>Portfolio · Ivalice Ledger</title>
+<title>Portfolio · Ledger</title>
 <link rel="icon" type="image/png" href="icon-32.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="manifest" href="manifest.json">
@@ -43,11 +43,11 @@
   .panel::before { top:-1px; left:-1px; border-top:2px solid var(--frame); border-left:2px solid var(--frame); }
   .panel::after  { bottom:-1px; right:-1px; border-bottom:2px solid var(--frame); border-right:2px solid var(--frame); }
   .sechead { display:flex; align-items:center; gap:12px; margin-bottom:18px; }
-  .sechead h2 { margin:0; font-family:'Cinzel',serif; font-weight:600; font-size:16px; letter-spacing:.18em; color:var(--ink); }
+  .sechead h2 { margin:0; font-family:'Cinzel',serif; font-weight:600; font-size:15px; letter-spacing:.18em; color:var(--ink); }
   .sechead .rule { flex:1; height:1px; background:linear-gradient(90deg, var(--frame), transparent); }
   .statcard { position:relative; padding:15px 16px; background:rgba(0,0,0,.22); border:1px solid var(--frame2); }
   .statcard .lbl { font-family:'Cinzel',serif; font-size:9.5px; letter-spacing:.2em; color:var(--dim); }
-  .statcard .big { font-family:'Jost',sans-serif; font-weight:500; font-size:27px; font-variant-numeric:tabular-nums; margin-top:7px; line-height:1; }
+  .statcard .big { font-family:'Jost',sans-serif; font-weight:500; font-size:22px; font-variant-numeric:tabular-nums; margin-top:7px; line-height:1; overflow-wrap:anywhere; }
   .statcard .sub { font-size:12px; font-variant-numeric:tabular-nums; margin-top:6px; }
   .chip { display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-size:10.5px; letter-spacing:.08em; padding:6px 11px; color:var(--glow); border:1px solid var(--frame2); background:rgba(0,0,0,.2); }
   .chip[disabled] { opacity:.5; cursor:default; }
@@ -62,6 +62,19 @@
   input, select { font-family:'Jost',sans-serif; }
   a { color: var(--glow); }
   .scrollx { overflow-x:auto; }
+  /* top strips (index + treasury): one fluid row */
+  .top-strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+  .top-val { font-weight:500; font-size:24px; color:var(--ink); }
+  /* narrow displays (e.g. Galaxy Fold cover): keep top boxes on one line, shrink box + text */
+  @media (max-width:600px){
+    #app { padding:16px 12px 44px; }
+    .top-strip { grid-template-columns:repeat(3,1fr); gap:7px; }
+    .top-strip .panel { padding:10px 8px; }
+    .top-val { font-size:17px; }
+    .statcard { padding:11px 11px; }
+    .statcard .big { font-size:17px; }
+    .sechead h2 { font-size:14px; letter-spacing:.12em; }
+  }
 </style>
 </head>
 <body>
@@ -72,10 +85,10 @@
 <script>
 /* ============================================================================
    PORTFOLIO DASHBOARD — FFXII / Ivalice Ledger reskin
-   Version: 260617_1   (filename: portfolio_dashboard_v260617_1.html)
+   Version: 260624_6   (filename: portfolio_dashboard_v260624_6.html)
    Scheme:  YYMMDD_N
    ============================================================================ */
-const VERSION = '260617_1';
+const VERSION = '260624_6';
 console.log('%cPortfolio Dashboard loaded — version ' + VERSION,
             'color:#cdbf95;font-weight:700;font-size:13px;');
 
@@ -110,45 +123,12 @@ const CONFIG = {
 const CASH_TICKERS = ['CASH', 'RCASH', 'JPMPD'];  // excluded from all API, beta, P/E
 
 /* ----------------------------------------------------------------------------
-   HOLDINGS  — single source of truth for positions.
-   Ported exactly from portfolio_dashboard_v260610_1.html.
-
-   Cash note (brokerage): QACDS sweep $191,253.37 + US Dollar offset -$40,563.75
-   + Chase Deposit Sweep = $150,689.62 net, carried as a single CASH position.
-   Update CASH/RCASH shares with the latest sweep balance as needed.
-
-   Fields: t (ticker), name, shares, cost (per-share basis), acct ('brok'|'ira').
-   For cash tickers, cost=1 and shares = the dollar balance.
+   HOLDINGS  — loaded at runtime from Firestore (portfolio/holdings); the embedded
+   array is intentionally empty (Firestore is the source of truth). Repopulate via
+   the Import modal. Schema: { t, name, shares, cost (per-share), acct:'brok'|'ira' };
+   for cash tickers cost=1 and shares = the dollar balance.
 ---------------------------------------------------------------------------- */
-const HOLDINGS = [
-  // ---- Brokerage ----
-  { t:'CASH', name:'Cash (USD + Chase Sweep)',     shares:150689.62, cost:1.00,   acct:'brok' },
-  { t:'GLDM', name:'SPDR Gold MiniShares',         shares:7750,      cost:36.70,  acct:'brok' },
-  { t:'XLE',  name:'Energy Select SPDR',           shares:2239.20,   cost:21.95,  acct:'brok' },
-  { t:'VUG',  name:'Vanguard Growth ETF',          shares:1223.50,   cost:38.10,  acct:'brok' },
-  { t:'JEPQ', name:'JPM Nasdaq Premium Income',    shares:986.97,    cost:51.62,  acct:'brok' },
-  { t:'SLV',  name:'iShares Silver',               shares:600,       cost:23.45,  acct:'brok' },
-  { t:'DRAM', name:'Roundhill Memory ETF',         shares:750,       cost:54.09,  acct:'brok' },
-  { t:'GOOG', name:'Alphabet Class C',             shares:100.80,    cost:100.57, acct:'brok' },
-  { t:'AMZN', name:'Amazon.com',                   shares:145,       cost:148.87, acct:'brok' },
-  { t:'JETS', name:'US Global Jets ETF',           shares:1000,      cost:20.27,  acct:'brok' },
-
-  // ---- Retirement IRA ----
-  { t:'RCASH',name:'Cash (USD)',                   shares:708.79,    cost:1.00,   acct:'ira'  },
-  { t:'NVDA', name:'Nvidia',                       shares:300,       cost:190.40, acct:'ira'  },
-  { t:'SETM', name:'Sprott Critical Materials',    shares:1500,      cost:32.03,  acct:'ira'  },
-  { t:'XLP',  name:'Consumer Staples SPDR',        shares:502.79,    cost:82.44,  acct:'ira'  },
-  { t:'GOOG', name:'Alphabet Class C',             shares:100.80,    cost:100.63, acct:'ira'  },
-  { t:'PNC',  name:'PNC Financial',                shares:168.88,    cost:133.52, acct:'ira'  },
-  { t:'JEPQ', name:'JPM Nasdaq Premium Income',    shares:563.41,    cost:53.68,  acct:'ira'  },
-  { t:'COPJ', name:'Sprott Jr Copper Miners',      shares:750,       cost:47.53,  acct:'ira'  },
-  { t:'XLE',  name:'Energy Select SPDR',           shares:479.87,    cost:29.40,  acct:'ira'  },
-  { t:'AB',   name:'AllianceBernstein',            shares:582,       cost:39.73,  acct:'ira'  },
-  { t:'AMZN', name:'Amazon.com',                   shares:75,        cost:272.32, acct:'ira'  },
-  { t:'TEM',  name:'Tempus AI',                    shares:150,       cost:55.00,  acct:'ira'  },
-  { t:'BBAI', name:'BigBear.ai',                   shares:2000,      cost:3.95,   acct:'ira'  },
-  { t:'JETS', name:'US Global Jets ETF',           shares:250,       cost:26.33,  acct:'ira'  },
-];
+const HOLDINGS = [];
 
 /* ----------------------------------------------------------------------------
    THEME TOKENS  (default = II Archadian, per the design handoff)
@@ -292,28 +272,20 @@ function render(){
 }
 
 function headerHTML(){
-  const tb = Object.entries(THEMES).map(([key,t]) => {
-    const on = state.theme===key;
-    return `<button data-theme="${key}" title="${esc(t.title)}" style="cursor:pointer;font-family:'Cinzel',serif;font-size:10px;letter-spacing:.12em;padding:7px 11px;color:${on?'#0c1a2c':'var(--ink)'};background:${on?'linear-gradient(180deg,#f0d8a0,var(--frame))':'rgba(0,0,0,.22)'};border:1px solid ${on?'#f3e6c2':'var(--frame2)'};">${t.label}</button>`;
-  }).join('');
   const pg = state.privacy ? '\u25c8' : '\u25c7';
   const pl = state.privacy ? 'Reveal Gil' : 'Conceal Gil';
   return `
-  <header style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:20px;">
+  <header style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:10px;">
     <div style="min-width:240px;">
       <div style="display:flex;align-items:center;gap:14px;">
         <div style="width:34px;height:34px;flex:none;transform:rotate(45deg);border:2px solid var(--frame);background:linear-gradient(135deg,rgba(205,191,149,.35),rgba(207,224,255,.18));box-shadow:0 0 16px rgba(205,191,149,.35);animation:ffFloat 5s ease-in-out infinite;"></div>
         <div>
-          <h1 style="margin:0;font-family:'Cinzel',serif;font-weight:700;font-size:30px;letter-spacing:.16em;color:var(--ink);text-shadow:0 0 22px rgba(207,224,255,.18);">PORTFOLIO</h1>
-          <div style="font-family:'Cinzel',serif;font-size:10.5px;letter-spacing:.42em;color:var(--frame);margin-top:3px;">IVALICE&nbsp;LEDGER&nbsp;·&nbsp;GIL&nbsp;EXCHANGE</div>
+          <h1 style="margin:0;font-family:'Cinzel',serif;font-weight:700;font-size:26px;letter-spacing:.16em;color:var(--ink);text-shadow:0 0 22px rgba(207,224,255,.18);">PORTFOLIO</h1>
+          <div style="font-family:'Cinzel',serif;font-size:10.5px;letter-spacing:.42em;color:var(--frame);margin-top:3px;">LEDGER&nbsp;·&nbsp;GIL&nbsp;EXCHANGE</div>
         </div>
       </div>
-      <p style="margin:12px 0 0;max-width:440px;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:16px;line-height:1.45;color:var(--dim);">&ldquo;The stock market is a device for transferring money from the impatient to the patient.&rdquo;</p>
     </div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:10px;">
-      <div style="display:flex;align-items:center;gap:7px;">
-        <span style="font-family:'Cinzel',serif;font-size:9.5px;letter-spacing:.28em;color:var(--dim);margin-right:2px;">THEME</span>${tb}
-      </div>
       <div style="display:flex;align-items:center;gap:9px;">
         <button id="privacyBtn" style="cursor:pointer;display:flex;align-items:center;gap:7px;font-family:'Jost',sans-serif;font-size:12px;letter-spacing:.04em;padding:8px 14px;color:var(--ink);background:linear-gradient(180deg,var(--panel1),var(--panel2));border:1px solid var(--frame2);">
           <span style="color:var(--frame);">${pg}</span>${pl}
@@ -323,7 +295,8 @@ function headerHTML(){
         </button>
       </div>
     </div>
-  </header>`;
+  </header>
+  <p style="margin:0 0 20px;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:16px;line-height:1.45;color:var(--dim);">&ldquo;The stock market is a device for transferring money from the impatient to the patient.&rdquo;</p>`;
 }
 
 function ratesStripHTML(){
@@ -344,7 +317,7 @@ function ratesStripHTML(){
         <span style="font-size:10px;letter-spacing:.1em;color:var(--dim);">${b.k}</span>
       </div>
       <div style="display:flex;align-items:baseline;gap:10px;margin-top:8px;">
-        <span style="font-weight:500;font-size:24px;color:var(--ink);">${yld(b.y)}</span>
+        <span class="top-val">${yld(b.y)}</span>
         <span style="font-size:11px;color:var(--dim);">yield</span>
       </div>
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid var(--frame2);">
@@ -352,7 +325,7 @@ function ratesStripHTML(){
         <span style="font-size:13px;font-weight:500;color:${tpCol(b.tpv)};">${tp(b.tpv)}</span>
       </div>
     </div>`).join('');
-  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:12px;">${cells}</div>`;
+  return `<div class="top-strip" style="margin-bottom:12px;">${cells}</div>`;
 }
 
 function indexStripHTML(){
@@ -368,11 +341,11 @@ function indexStripHTML(){
         <span style="font-size:10px;letter-spacing:.1em;color:var(--dim);">${esc(ix.k)}</span>
       </div>
       <div style="display:flex;align-items:baseline;gap:10px;margin-top:8px;">
-        <span style="font-weight:500;font-size:24px;color:var(--ink);">${esc(ix.v)}</span>
+        <span class="top-val">${esc(ix.v)}</span>
         <span class="${ix.up>=0?'gl-gain':'gl-loss'}" style="font-size:13px;font-weight:500;">${esc(ix.chg)}</span>
       </div>
     </div>`).join('');
-  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;">${cells}</div>`;
+  return `<div class="top-strip" style="margin-bottom:20px;">${cells}</div>`;
 }
 
 function navHTML(){
@@ -384,12 +357,12 @@ function navHTML(){
   ];
   const btns = items.map(n => {
     const on = state.tab===n.id;
-    return `<button data-tab="${n.id}" style="cursor:pointer;flex:1 1 auto;min-width:118px;position:relative;display:flex;align-items:center;justify-content:center;gap:9px;padding:15px 16px;font-family:'Cinzel',serif;font-size:13px;letter-spacing:.12em;white-space:nowrap;color:${on?'var(--ink)':'var(--dim)'};background:${on?'var(--sel)':'rgba(0,0,0,.18)'};border:1px solid ${on?'var(--frame)':'var(--frame2)'};box-shadow:${on?'inset 0 0 16px rgba(207,224,255,.12)':'none'};">
+    return `<button data-tab="${n.id}" style="cursor:pointer;flex:1 1 auto;min-width:96px;position:relative;display:flex;align-items:center;justify-content:center;gap:7px;padding:9px 14px;font-family:'Cinzel',serif;font-size:12px;letter-spacing:.12em;white-space:nowrap;color:${on?'var(--ink)':'var(--dim)'};background:${on?'var(--sel)':'rgba(0,0,0,.18)'};border:1px solid ${on?'var(--frame)':'var(--frame2)'};box-shadow:${on?'inset 0 0 16px rgba(207,224,255,.12)':'none'};">
       <span style="color:var(--glow);font-size:10px;opacity:${on?1:0};animation:ffCursor 1.4s ease-in-out infinite;">&#9656;</span>
-      <span style="font-size:15px;color:var(--frame);">${n.glyph}</span><span>${n.label}</span>
+      <span style="font-size:13px;color:var(--frame);">${n.glyph}</span><span>${n.label}</span>
     </button>`;
   }).join('');
-  return `<div style="display:flex;gap:8px;margin-bottom:20px;overflow-x:auto;padding-bottom:3px;">${btns}</div>`;
+  return `<div style="display:flex;gap:8px;margin-bottom:14px;overflow-x:auto;padding-bottom:3px;">${btns}</div>`;
 }
 
 function statCard(lbl, big, bigCls, sub, subCls){
@@ -417,11 +390,8 @@ function todayHTML(d){
     const maSd = (ma,s) => g.isCash ? '<span style="color:var(--dim);">—</span>'
       : `<span style="color:${maCol};">${fmtMA(ma)}</span> <span style="color:${sdCol};">[${fmtSD(s)}]</span>`;
     const perLbl = t => `<span style="font-family:'Cinzel',serif;font-size:8px;letter-spacing:.1em;color:var(--frame);margin-right:5px;">${t}</span>`;
-    return `<div class="t-row" data-ticker="${g.t}" style="cursor:pointer;display:grid;grid-template-columns:1.4fr 0.85fr 0.8fr 2.15fr 0.95fr 1.15fr 0.6fr 0.8fr;gap:8px;padding:13px 12px;border-bottom:1px solid rgba(205,191,149,.12);align-items:center;">
-      <div style="display:flex;flex-direction:column;gap:1px;">
-        <span style="font-family:'Cinzel',serif;font-weight:600;font-size:13px;letter-spacing:.06em;color:var(--ink);">${esc(g.t)}</span>
-        <span style="font-size:10.5px;color:var(--dim);">${esc(g.name)}</span>
-      </div>
+    return `<div class="t-row" data-ticker="${g.t}" style="cursor:pointer;display:grid;grid-template-columns:1fr 0.85fr 0.8fr 2.1fr 0.9fr 1.1fr 0.55fr 0.7fr;gap:6px;padding:8px 10px;border-bottom:1px solid rgba(205,191,149,.12);align-items:center;">
+      <span style="font-family:'Cinzel',serif;font-weight:600;font-size:12px;letter-spacing:.06em;color:var(--ink);">${esc(g.t)}</span>
       <span style="text-align:right;color:var(--ink);">${g.isCash?'—':price(g.price)}</span>
       <span class="${colClass(g.daypct)}" style="text-align:right;">${g.isCash?'—':pct(g.daypct)}</span>
       <span style="display:flex;flex-direction:column;gap:2px;align-items:flex-end;line-height:1.3;font-size:11px;">
@@ -449,8 +419,8 @@ function todayHTML(d){
         <span class="chip" id="refreshBeta">&#8635; Beta &amp; P/E</span>
       </div>
     </div>
-    <div class="scrollx"><div style="min-width:880px;">
-      <div style="display:grid;grid-template-columns:1.4fr 0.85fr 0.8fr 2.15fr 0.95fr 1.15fr 0.6fr 0.8fr;gap:8px;padding:10px 12px;background:var(--head);border:1px solid var(--frame2);font-family:'Cinzel',serif;font-size:9.5px;letter-spacing:.14em;color:var(--frame);">
+    <div class="scrollx"><div style="min-width:700px;">
+      <div style="display:grid;grid-template-columns:1fr 0.85fr 0.8fr 2.1fr 0.9fr 1.1fr 0.55fr 0.7fr;gap:6px;padding:9px 10px;background:var(--head);border:1px solid var(--frame2);font-family:'Cinzel',serif;font-size:9.5px;letter-spacing:.14em;color:var(--frame);">
         <span>TICKER</span><span style="text-align:right;">PRICE</span><span style="text-align:right;">DAY %</span><span style="text-align:right;">MA&nbsp;·&nbsp;[STD DEV]</span><span style="text-align:right;">DAY $</span><span style="text-align:right;">VALUE</span><span style="text-align:right;">BETA</span><span style="text-align:right;">ACCTS</span>
       </div>${rows}
     </div></div>
@@ -476,9 +446,8 @@ function holdingsHTML(d){
 
   const brokPct = d.totalValue ? (d.brokTotal/d.totalValue*100) : 0;
   const detail = d.byTicker.map(g => `
-    <div class="t-row" data-ticker="${g.t}" style="cursor:pointer;display:grid;grid-template-columns:1.5fr 1.6fr 0.7fr 1.2fr 1.2fr 1.3fr 1.2fr 0.9fr;gap:8px;padding:13px 12px;border-bottom:1px solid rgba(205,191,149,.12);align-items:center;">
-      <span style="font-family:'Cinzel',serif;font-weight:600;font-size:13px;color:var(--ink);">${esc(g.t)}</span>
-      <span style="font-size:11.5px;color:var(--dim);">${esc(g.name)}</span>
+    <div class="t-row" data-ticker="${g.t}" style="cursor:pointer;display:grid;grid-template-columns:1.1fr 0.6fr 1.2fr 1.2fr 1.3fr 1.2fr 0.9fr;gap:6px;padding:8px 10px;border-bottom:1px solid rgba(205,191,149,.12);align-items:center;">
+      <span style="font-family:'Cinzel',serif;font-weight:600;font-size:12px;color:var(--ink);">${esc(g.t)}</span>
       <span style="text-align:right;font-size:11px;color:var(--dim);">${acctLabel(g)}</span>
       <span style="text-align:right;color:var(--dim);">${g.brok>0?money(g.brok):'—'}</span>
       <span style="text-align:right;color:var(--dim);">${g.ira>0?money(g.ira):'—'}</span>
@@ -513,9 +482,9 @@ function holdingsHTML(d){
         </div>
       </div>
     </div>
-    <div class="scrollx"><div style="min-width:720px;">
-      <div style="display:grid;grid-template-columns:1.5fr 1.6fr 0.7fr 1.2fr 1.2fr 1.3fr 1.2fr 0.9fr;gap:8px;padding:10px 12px;background:var(--head);border:1px solid var(--frame2);font-family:'Cinzel',serif;font-size:9.5px;letter-spacing:.12em;color:var(--frame);">
-        <span>TICKER</span><span>NAME</span><span style="text-align:right;">ACCTS</span><span style="text-align:right;">BROK</span><span style="text-align:right;">IRA</span><span style="text-align:right;">TOTAL</span><span style="text-align:right;">G/L $</span><span style="text-align:right;">G/L %</span>
+    <div class="scrollx"><div style="min-width:480px;">
+      <div style="display:grid;grid-template-columns:1.1fr 0.6fr 1.2fr 1.2fr 1.3fr 1.2fr 0.9fr;gap:6px;padding:9px 10px;background:var(--head);border:1px solid var(--frame2);font-family:'Cinzel',serif;font-size:9.5px;letter-spacing:.12em;color:var(--frame);">
+        <span>TICKER</span><span style="text-align:right;">ACCTS</span><span style="text-align:right;">BROK</span><span style="text-align:right;">IRA</span><span style="text-align:right;">TOTAL</span><span style="text-align:right;">G/L $</span><span style="text-align:right;">G/L %</span>
       </div>${detail}
     </div></div>
   </section>`;
@@ -725,7 +694,6 @@ function chartSeries(ticker, range, endPrice){
    EVENT WIRING
    ============================================================================ */
 function wire(d){
-  document.querySelectorAll('[data-theme]').forEach(b => b.onclick = () => { state.theme=b.dataset.theme; store.set('pf_theme',state.theme); render(); });
   document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { state.tab=b.dataset.tab; render(); });
   const pv = document.getElementById('privacyBtn'); if(pv) pv.onclick = () => { state.privacy=!state.privacy; store.set('pf_privacy', state.privacy?'1':'0'); render(); };
   const ib = document.getElementById('importBtn'); if(ib) ib.onclick = () => { state.showImport=true; render(); };
@@ -998,13 +966,12 @@ async function fetchNews(force){
 function refreshAll(){ fetchPrices(); fetchMetrics(); fetchNews(); fetchAllStdev(); fetchRates(); }
 
 /* ----------------------------------------------------------------------------
-   Rate boxes:
-   - Yields (DGS1/DGS5/DGS10) come live from Twelve Data (symbols US1Y/US5Y/US10Y),
-     client-side on your existing key — no FRED / Cloud Function / CORS needed.
-   - Term premia (TP1/TP5/TP10) are NOT available from Twelve Data or Finnhub
-     (Fed-model series), so they're read from the Firestore portfolio/rates doc
-     written by the FRED Cloud Function. Yields fetch fresh each load, so they are
-     not written back to Firestore (no write conflict with the function's TP).
+   Rate boxes — both yields and term premia come from FRED via the
+   `portfolio/rates` doc written by the Cloud Function (functions/index.js):
+     - Yields (DGS1/DGS5/DGS10)     FRED daily constant-maturity
+     - Term premia (TP1/TP5/TP10)   FRED Kim-Wright THREEFYTP{N} (monthly)
+   Twelve Data (US1Y/US5Y/US10Y) is kept ONLY as a yields fallback, used when the
+   Firestore doc lacks yields (its Treasury symbols require a paid Twelve Data plan).
 ---------------------------------------------------------------------------- */
 const YIELD_SYMS = { DGS1:'US1Y', DGS5:'US5Y', DGS10:'US10Y' };
 async function loadRatesFromFirestore(){
@@ -1035,7 +1002,11 @@ async function fetchYieldsFromTwelve(){
     else console.warn('[yields] Twelve Data returned no usable values', j);
   }catch(e){ console.warn('[yields] Twelve Data failed', e); }
 }
-async function fetchRates(){ await loadRatesFromFirestore(); await fetchYieldsFromTwelve(); }
+async function fetchRates(){
+  await loadRatesFromFirestore();
+  const r = state.rates || {};
+  if(r.DGS1==null || r.DGS5==null || r.DGS10==null) await fetchYieldsFromTwelve();  // fallback only
+}
 
 /* ============================================================================
    STANDARD DEVIATION  — Firebase-first, per-ticker staleness (ported from old file)
