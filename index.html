@@ -85,10 +85,10 @@
 <script>
 /* ============================================================================
    PORTFOLIO DASHBOARD — FFXII / Ivalice Ledger reskin
-   Version: 260624_8   (filename: portfolio_dashboard_v260624_8.html)
+   Version: 260624_10   (filename: portfolio_dashboard_v260624_10.html)
    Scheme:  YYMMDD_N
    ============================================================================ */
-const VERSION = '260624_8';
+const VERSION = '260624_10';
 console.log('%cPortfolio Dashboard loaded — version ' + VERSION,
             'color:#cdbf95;font-weight:700;font-size:13px;');
 
@@ -314,9 +314,9 @@ function ratesStripHTML(){
     <div class="panel" style="padding:14px 16px;">
       <div style="font-family:'Cinzel',serif;font-size:11px;letter-spacing:.16em;color:var(--frame);">${b.name}</div>
       <div style="margin-top:8px;"><span class="top-val">${yld(b.y)}</span></div>
-      <div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--frame2);">
-        <div style="font-family:'Cinzel',serif;font-size:8.5px;letter-spacing:.14em;color:var(--dim);">TERM</div>
-        <div style="font-size:13px;font-weight:500;margin-top:2px;color:${tpCol(b.tpv)};">${tp(b.tpv)}</div>
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:6px;white-space:nowrap;margin-top:6px;padding-top:6px;border-top:1px solid var(--frame2);">
+        <span style="font-family:'Cinzel',serif;letter-spacing:.14em;color:var(--dim);font-size:clamp(7px,2vw,9px);">TERM</span>
+        <span style="font-weight:500;color:var(--ink);font-size:clamp(9px,2.6vw,13px);">${tp(b.tpv)}</span>
       </div>
     </div>`).join('');
   return `<div class="top-strip" style="margin-bottom:12px;">${cells}</div>`;
