@@ -85,10 +85,10 @@
 <script>
 /* ============================================================================
    PORTFOLIO DASHBOARD — FFXII / Ivalice Ledger reskin
-   Version: 260624_7   (filename: portfolio_dashboard_v260624_7.html)
+   Version: 260624_8   (filename: portfolio_dashboard_v260624_8.html)
    Scheme:  YYMMDD_N
    ============================================================================ */
-const VERSION = '260624_7';
+const VERSION = '260624_8';
 console.log('%cPortfolio Dashboard loaded — version ' + VERSION,
             'color:#cdbf95;font-weight:700;font-size:13px;');
 
@@ -312,17 +312,11 @@ function ratesStripHTML(){
   ];
   const cells = boxes.map(b => `
     <div class="panel" style="padding:14px 16px;">
-      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;">
-        <span style="font-family:'Cinzel',serif;font-size:11px;letter-spacing:.16em;color:var(--frame);">${b.name} TREASURY</span>
-        <span style="font-size:10px;letter-spacing:.1em;color:var(--dim);">${b.k}</span>
-      </div>
-      <div style="display:flex;align-items:baseline;gap:10px;margin-top:8px;">
-        <span class="top-val">${yld(b.y)}</span>
-        <span style="font-size:11px;color:var(--dim);">yield</span>
-      </div>
-      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid var(--frame2);">
-        <span style="font-family:'Cinzel',serif;font-size:8.5px;letter-spacing:.14em;color:var(--dim);">TERM PREMIUM</span>
-        <span style="font-size:13px;font-weight:500;color:${tpCol(b.tpv)};">${tp(b.tpv)}</span>
+      <div style="font-family:'Cinzel',serif;font-size:11px;letter-spacing:.16em;color:var(--frame);">${b.name}</div>
+      <div style="margin-top:8px;"><span class="top-val">${yld(b.y)}</span></div>
+      <div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--frame2);">
+        <div style="font-family:'Cinzel',serif;font-size:8.5px;letter-spacing:.14em;color:var(--dim);">TERM</div>
+        <div style="font-size:13px;font-weight:500;margin-top:2px;color:${tpCol(b.tpv)};">${tp(b.tpv)}</div>
       </div>
     </div>`).join('');
   return `<div class="top-strip" style="margin-bottom:12px;">${cells}</div>`;
@@ -340,9 +334,9 @@ function indexStripHTML(){
         <span style="font-family:'Cinzel',serif;font-size:11px;letter-spacing:.16em;color:var(--frame);">${esc(ix.name)}</span>
         <span style="font-size:10px;letter-spacing:.1em;color:var(--dim);">${esc(ix.k)}</span>
       </div>
-      <div style="display:flex;align-items:baseline;gap:10px;margin-top:8px;">
-        <span class="top-val">${esc(ix.v)}</span>
-        <span class="${ix.up>=0?'gl-gain':'gl-loss'}" style="font-size:13px;font-weight:500;">${esc(ix.chg)}</span>
+      <div style="margin-top:8px;">
+        <div><span class="top-val">${esc(ix.v)}</span></div>
+        <div class="${ix.up>=0?'gl-gain':'gl-loss'}" style="font-size:13px;font-weight:500;margin-top:2px;">${esc(ix.chg)}</div>
       </div>
     </div>`).join('');
   return `<div class="top-strip" style="margin-bottom:20px;">${cells}</div>`;
@@ -357,12 +351,12 @@ function navHTML(){
   ];
   const btns = items.map(n => {
     const on = state.tab===n.id;
-    return `<button data-tab="${n.id}" style="cursor:pointer;flex:1 1 auto;min-width:96px;position:relative;display:flex;align-items:center;justify-content:center;gap:7px;padding:9px 14px;font-family:'Cinzel',serif;font-size:12px;letter-spacing:.12em;white-space:nowrap;color:${on?'var(--ink)':'var(--dim)'};background:${on?'var(--sel)':'rgba(0,0,0,.18)'};border:1px solid ${on?'var(--frame)':'var(--frame2)'};box-shadow:${on?'inset 0 0 16px rgba(207,224,255,.12)':'none'};">
+    return `<button data-tab="${n.id}" style="cursor:pointer;flex:1 1 140px;position:relative;display:flex;align-items:center;justify-content:center;gap:7px;padding:9px 16px;font-family:'Cinzel',serif;font-size:12px;letter-spacing:.12em;white-space:nowrap;color:${on?'var(--ink)':'var(--dim)'};background:${on?'var(--sel)':'rgba(0,0,0,.18)'};border:1px solid ${on?'var(--frame)':'var(--frame2)'};box-shadow:${on?'inset 0 0 16px rgba(207,224,255,.12)':'none'};">
       <span style="color:var(--glow);font-size:10px;opacity:${on?1:0};animation:ffCursor 1.4s ease-in-out infinite;">&#9656;</span>
       <span style="font-size:13px;color:var(--frame);">${n.glyph}</span><span>${n.label}</span>
     </button>`;
   }).join('');
-  return `<div style="display:flex;gap:8px;margin-bottom:14px;overflow-x:auto;padding-bottom:3px;">${btns}</div>`;
+  return `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">${btns}</div>`;
 }
 
 function statCard(lbl, big, bigCls, sub, subCls){
